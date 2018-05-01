@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(Tilemap C)
 
-add_definitions(-DDEBUG)
+#add_definitions(-DDEBUG)
 
 set(plataform "x32")
 #set(plataform "x64")
