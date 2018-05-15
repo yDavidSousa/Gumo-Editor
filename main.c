@@ -4,63 +4,64 @@
 #include <SDL.h>
 #include <SDL_image.h>
 
+/*
+ * int index = (TILES_X * r) + c;
+ * const char *PATH = "C:\\Users\\David Sousa\\Documents\\Projects\\Games\\Tilemap-Editor\\content\\map.txt";
+ * */
+
+
 //Const & Defines
+
+const int TILES = 9 * 5;
+
 const int SCREEN_WIDTH = 960;
 const int SCREEN_HEIGHT = 544;
 
 const int LEVEL_WIDTH = 960;
 const int LEVEL_HEIGHT = 544;
 
-const int GRID_WIDTH = 32;
-const int GRID_HEIGHT = 32;
+const int TILE_WIDTH = 32;
+const int TILE_HEIGHT = 32;
 
 const int FPS = 60;
 
-const int TILES = 9 * 5;
+#define NO_TILE (-1)
 
 //Structures
-typedef enum options{
+
+typedef enum tools{
     Brush,
     Erase,
-    Filter
-} options_t;
-
-typedef struct scale {
-    float w, h;
-} scale_t;
-
-typedef struct vector {
-    float x, y;
-} vector_t;
-
-typedef struct color {
-    int r, g, b, a;
-} color_t;
+    Filter,
+    Select,
+} tools_t;
 
 typedef struct grid {
-    int type;
-    color_t color;
-    vector_t position;
-    scale_t size;
-} grid_t;
+    int tile;
+    int x, y;
+} grid_t; // remove
 
 typedef struct tile {
-    int type;
+    int id;
     SDL_Texture *texture;
-    SDL_Rect *spritesheet;
-    SDL_Rect srcR;
+    SDL_Rect srcrect;
+    int w, h;
 } tile_t;
 
-//Functions
-SDL_Rect *slice_array(SDL_Rect *array, int start, int end) {
-    int numElements = (end - start + 1);
-    size_t numBytes = sizeof(SDL_Rect) * numElements;
+typedef struct layer {
+    int index;
+    char *name;
+    int hidden;
+} layer_t;
 
-    SDL_Rect *slice = malloc(numBytes);
-    memcpy(slice, array + start, numBytes);
+typedef struct tilemap {
+    grid_t data[20][20][20];
+    layer_t layerinfo[8];
+    tile_t *tileinfo;
+    int cur_tile, cur_layer;
+} tilemap_t;
 
-    return slice;
-}
+//Util Functions
 
 SDL_Texture *load_texture(SDL_Renderer *renderer, char *path){
     SDL_Surface* surface = IMG_Load(path);
@@ -69,26 +70,21 @@ SDL_Texture *load_texture(SDL_Renderer *renderer, char *path){
     return texture;
 }
 
-SDL_Rect *split_image(SDL_Rect *rect, int column, int row) {
+SDL_Rect *split_image(SDL_Texture *texture, int column, int row) {
 
-    SDL_Rect *image = (SDL_Rect *) malloc((column * row) * sizeof(SDL_Rect));
-    int splitWidth = rect->w / column;
-    int splitHeight = rect->h / row;
+    int width, height;
     int i = 0;
-#if DEBUG
-    printf("RectWidth: %d RectHeight: %d\n", rect->w, rect->h);
-    printf("SplitWidth: %d SplitHeight: %d\n", splitWidth, splitHeight);
-#endif
+    SDL_QueryTexture(texture, NULL, NULL, &width, &height);
+    SDL_Rect *image = (SDL_Rect *) malloc((column * row) * sizeof(SDL_Rect));
+    width = width / column;
+    height = height / row;
 
-    for (int y = 0; y < row; ++y) {
-        for (int x = 0; x < column; ++x) {
-            (image + i)->x = splitWidth * x;
-            (image + i)->y = splitHeight * y;
-            (image + i)->w = splitWidth;
-            (image + i)->h = splitHeight;
-#if DEBUG
-            printf("SplitImage: %d PositionX: %d PositionY: %d\n", i, (image + i)->x, (image + i)->y);
-#endif
+    for (int r = 0; r < row; ++r) {
+        for (int c = 0; c < column; ++c) {
+            image[i].x = width * c;
+            image[i].y = height * r;
+            image[i].w = width;
+            image[i].h = height;
             i++;
         }
     }
@@ -100,86 +96,61 @@ int snap_to_grid(int value, int increment, int offset){
     return (value/increment) * increment + offset;
 }
 
-color_t get_color(int type){
-
-    switch (type){
-        case 0: return (color_t){0, 0, 0, 255};
-        case 1: return (color_t){255, 0, 0, 255};
-        case 2: return (color_t){0, 255, 0, 255};
-        case 3: return (color_t){0, 0, 255, 255};
-        default: return (color_t){255, 255, 255, 255};
-    }
-}
+//Tilemap Functions
 
 tile_t *get_tile(tile_t *tiles, int type){
     for (int i = 0; i < TILES; ++i) {
-        if(tiles[i].type == type)
+        if(tiles[i].id == type)
             return &tiles[i];
     }
 
     return NULL;
 }
 
-void render_tile(SDL_Renderer *renderer, grid_t *grid, tile_t *tiles){
+void render_tile(SDL_Renderer *renderer, grid_t *tilemap, tile_t *tiles){
 
-    if(grid->type == -1)
+    if(tilemap->tile == NO_TILE)
         return;
 
-    tile_t *tile = get_tile(tiles, grid->type);
-    SDL_Rect desR = {};
-    desR.x = (int)grid->position.x;
-    desR.y = (int)grid->position.y;
-    desR.w = (int)grid->size.w;
-    desR.h = (int)grid->size.h;
-    SDL_RenderCopy(renderer, tile->texture, &tile->srcR, &desR);
-
-    //SDL_SetRenderDrawColor(renderer, (Uint8)grid->color.r, (Uint8)grid->color.g, (Uint8)grid->color.b, (Uint8)grid->color.a);
-    //SDL_Rect tileRect = {(int)grid->position.x, (int)grid->position.y, (int)grid->size.w, (int)grid->size.h};
-    //SDL_RenderFillRect(renderer, &tileRect);
+    tile_t *tile = get_tile(tiles, tilemap->tile);
+    SDL_Rect desR = (SDL_Rect){tilemap->x, tilemap->y, tile->w, tile->h};
+    SDL_RenderCopy(renderer, tile->texture, &tile->srcrect, &desR);
 }
 
-void put_tile(grid_t *grid, int x, int y, int type){
+void put_tile(grid_t *tilemap, int x, int y, int tile){
 
-    if(grid->type == type)
+    if(tilemap->tile == tile)
         return;
 
-    grid->position.x = snap_to_grid(x, GRID_WIDTH, 0);
-    grid->position.y = snap_to_grid(y, GRID_HEIGHT, 0);
-    grid->size.w = GRID_WIDTH;
-    grid->size.h = GRID_HEIGHT;
-    grid->type = type;
-    //grid->color = get_color(type);
+    tilemap->tile = tile;
+    tilemap->x = snap_to_grid(x, TILE_WIDTH, 0);
+    tilemap->y = snap_to_grid(y, TILE_HEIGHT, 0);
 }
 
-void remove_tile(grid_t *grid){
+void remove_tile(grid_t *tilemap){
 
-    if(grid->type == -1)
+    if(tilemap->tile == NO_TILE)
         return;
 
-    grid->type = -1;
-    grid->position = (vector_t){0, 0};
-    grid->size = (scale_t){0, 0};
-    //grid->color = (color_t){0, 0, 0, 0};
+    tilemap->tile = NO_TILE;
+    tilemap->x = tilemap->y = 0;
 }
 
-void filter_tile(grid_t *grid,int *currentType){
+void filter_tile(grid_t *tilemap,int *cur_tile){
 
-    if(grid->type == -1)
+    if(tilemap->tile == NO_TILE)
         return;
 
-    *currentType = grid->type;
-}
-
-void clean_up(grid_t *grid, int length){
-    for (int i = 0; i < length; ++i)
-        remove_tile(&grid[i]);
+    *cur_tile = tilemap->tile;
 }
 
 //Main Function
+
 int main(int argc, char *args[]) {
-    const int TOTAL_TILE_X = LEVEL_WIDTH / GRID_WIDTH;
-    const int TOTAL_TILE_Y = LEVEL_HEIGHT / GRID_HEIGHT;
-    const int TOTAL_TILE_Z = 4;
+
+    const int TILES_X = LEVEL_WIDTH / TILE_WIDTH;
+    const int TILES_Y = LEVEL_HEIGHT / TILE_HEIGHT;
+    const int LAYERS = 4;
 
     SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;
@@ -192,43 +163,39 @@ int main(int argc, char *args[]) {
     window = SDL_CreateWindow("Tilemap Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, 0);
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
-    int prevTime = 0;
-    int currentTime = 0;
+    int prev_time = 0;
+    int cur_time = 0;
     int quit = 0;
 
-    int currentType = 0;
-    int currentLayer = 0;
+    int cur_tile = 0;
+    int cur_layer = 0;
     int mouseX, mouseY;
 
-    grid_t grids[TOTAL_TILE_X][TOTAL_TILE_Y][TOTAL_TILE_Z];
+    tools_t cur_tool = Brush;
+    grid_t tilemap[TILES_X][TILES_Y][LAYERS];
     tile_t *tiles = (tile_t *) malloc(TILES * sizeof(tile_t));
 
-    options_t options = Brush;
-
-    for (int j = 0; j < TOTAL_TILE_Z; ++j)
-        for (int i = 0; i < TOTAL_TILE_Y; ++i)
-            for (int k = 0; k < TOTAL_TILE_X; ++k)
-                grids[k][i][j].type = -1;
+    for (int j = 0; j < LAYERS; ++j)
+        for (int i = 0; i < TILES_X * TILES_Y; ++i)
+                tilemap[0][i][j].tile = NO_TILE;
 
     SDL_Texture *texture = load_texture(renderer, "content/tile2.png");
-
-    SDL_Rect rect = {0, 0, 0, 0};
-    SDL_QueryTexture(texture, NULL, NULL, &rect.w, &rect.h);
-    SDL_Rect *spritesheet = split_image(&rect, 9, 5);
+    SDL_Rect *spritesheet = split_image(texture, 9, 5);
 
     for (int i = 0; i < TILES; ++i) {
-        tiles[i].type = i;
+        tiles[i].id = i;
         tiles[i].texture = texture;
-        tiles[i].srcR.x = spritesheet[i].x;
-        tiles[i].srcR.y = spritesheet[i].y;
-        tiles[i].srcR.w = spritesheet[i].w;
-        tiles[i].srcR.h = spritesheet[i].h;
+        tiles[i].srcrect.x = spritesheet[i].x;
+        tiles[i].srcrect.y = spritesheet[i].y;
+        tiles[i].srcrect.w = spritesheet[i].w;
+        tiles[i].srcrect.h = spritesheet[i].h;
+        tiles[i].w = tiles[i].h = TILE_WIDTH;
     }
 
     while (!quit){
         //Time loop
-        prevTime = currentTime;
-        currentTime = SDL_GetTicks();
+        prev_time = cur_time;
+        cur_time = SDL_GetTicks();
 
         SDL_GetMouseState(&mouseX, &mouseY);
 
@@ -242,39 +209,36 @@ int main(int argc, char *args[]) {
                     break;
                 case SDL_KEYDOWN:
                     if(scanCode == SDL_SCANCODE_ESCAPE) quit = 1;
-                    if(scanCode == SDL_SCANCODE_1) currentLayer = 0;
-                    if(scanCode == SDL_SCANCODE_2) currentLayer = 1;
-                    if(scanCode == SDL_SCANCODE_3) currentLayer = 2;
-                    if(scanCode == SDL_SCANCODE_4) currentLayer = 3;
+                    if(scanCode == SDL_SCANCODE_1) cur_layer = 0;
+                    if(scanCode == SDL_SCANCODE_2) cur_layer = 1;
+                    if(scanCode == SDL_SCANCODE_3) cur_layer = 2;
+                    if(scanCode == SDL_SCANCODE_4) cur_layer = 3;
                     if ((event.key.keysym.mod & KMOD_CTRL)) {
-                        if(scanCode == SDL_SCANCODE_B) options = Brush;
-                        if(scanCode == SDL_SCANCODE_E) options = Erase;
-                        if(scanCode == SDL_SCANCODE_F) options = Filter;
-                        //if(scanCode == SDL_SCANCODE_0) clean_up(grids, TOTAL_TILES);
+                        if(scanCode == SDL_SCANCODE_B) cur_tool = Brush;
+                        if(scanCode == SDL_SCANCODE_E) cur_tool = Erase;
+                        if(scanCode == SDL_SCANCODE_F) cur_tool = Filter;
                     }
                     break;
                 case SDL_MOUSEWHEEL:
-                    currentType += event.wheel.y;
-                    currentType = currentType < 0 ? TILES - 1 : currentType % TILES;
+                    cur_tile += event.wheel.y;
+                    cur_tile = cur_tile < 0 ? TILES - 1 : cur_tile % TILES;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                 case SDL_MOUSEMOTION:
-                    c = (mouseX / GRID_WIDTH);
-                    r = (mouseY / GRID_HEIGHT);
-                    l = currentLayer;
+                    c = (mouseX / TILE_WIDTH);
+                    r = (mouseY / TILE_HEIGHT);
+                    l = cur_layer;
 
                     if(event.button.button == SDL_BUTTON_LEFT){
-                        //int index = (TOTAL_TILE_X * r) + c;
-
-                        switch(options){
+                        switch(cur_tool){
                             case Brush:
-                                put_tile(&grids[c][r][l], mouseX, mouseY, currentType);
+                                put_tile(&tilemap[c][r][l], mouseX, mouseY, cur_tile);
                                 break;
                             case Erase:
-                                remove_tile(&grids[c][r][l]);
+                                remove_tile(&tilemap[c][r][l]);
                                 break;
                             case Filter:
-                                filter_tile(&grids[c][r][l], &currentType);
+                                filter_tile(&tilemap[c][r][l], &cur_tile);
                                 break;
                         }
                     }
@@ -286,27 +250,26 @@ int main(int argc, char *args[]) {
             }
         }
 
-        SDL_SetRenderDrawColor(renderer, (Uint8)255, (Uint8)255, (Uint8)255, (Uint8)255);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
 
-        for (int j = 0; j < TOTAL_TILE_Z; ++j)
-            for (int i = 0; i < TOTAL_TILE_Y; ++i)
-                for (int k = 0; k < TOTAL_TILE_X; ++k){
-                    if(options == Brush && j == currentLayer){
-                        SDL_Rect desR = {};
-                        tile_t *tile = get_tile(tiles, currentType);
-                        desR.x = snap_to_grid(mouseX, GRID_WIDTH, 0);
-                        desR.y = snap_to_grid(mouseY, GRID_HEIGHT, 0);
-                        desR.w = desR.h = GRID_WIDTH;
-                        SDL_RenderCopy(renderer, tile->texture, &tile->srcR, &desR);
+        for (int j = 0; j < LAYERS; ++j)
+            for (int i = 0; i < TILES_X * TILES_Y; ++i){
+                    if(cur_tool == Brush && j == cur_layer){
+                        tile_t *tile = get_tile(tiles, cur_tile);
+                        SDL_Rect dstrect = {};
+                        dstrect.x = snap_to_grid(mouseX, TILE_WIDTH, 0);
+                        dstrect.y = snap_to_grid(mouseY, TILE_HEIGHT, 0);
+                        dstrect.w = dstrect.h = TILE_WIDTH;
+                        SDL_RenderCopy(renderer, tile->texture, &tile->srcrect, &dstrect);
                     }
-                    render_tile(renderer, &grids[k][i][j], tiles);
-                }
+                    render_tile(renderer, &tilemap[0][i][j], tiles);
+            }
 
         SDL_RenderPresent(renderer);
 
-        if(currentTime < FPS)
-            SDL_Delay(currentTime - (Uint32)prevTime);
+        if(cur_time < FPS)
+            SDL_Delay(cur_time - (Uint32)prev_time);
     }
 
     free(tiles);
