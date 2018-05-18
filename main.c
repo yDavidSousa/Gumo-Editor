@@ -55,7 +55,7 @@ typedef struct layer {
 } layer_t;
 
 typedef struct tilemap {
-    grid_t data[20][20][20];
+    grid_t data[200][200][200];
     layer_t layerinfo[8];
     tile_t *tileinfo;
     int cur_tile, cur_layer;
@@ -144,9 +144,121 @@ void filter_tile(grid_t *tilemap,int *cur_tile){
     *cur_tile = tilemap->tile;
 }
 
+void save_file(){
+    // FILE
+    FILE *file = fopen("content/map.txt", "w");
+
+    if(file){
+        //WRITE LAYERS
+        fprintf(file, "-LAYERS\n");
+        for (int i = 0; i < LAYERS; ++i)
+            fprintf(file, "\tLAYER_%d %d\n", i+1, i);
+
+        //WRITE SPRITE_SHEET
+        fprintf(file, "-SPRITE_SHEET\n");
+        fprintf(file, "\tcontent/tile2.png");
+        fprintf(file, " //sprite sheet path\n");
+
+        //WRITE SIZES
+        fprintf(file, "-SIZES\n");;
+        fprintf(file,"\t%d //width\n", LEVEL_WIDTH);
+        fprintf(file,"\t%d //height\n", LEVEL_HEIGHT);
+        fprintf(file,"\t%d //tile size\n", TILE_WIDTH);
+
+        //WRITE TILEMAP PER LAYERS
+        for (int j = 0; j < LAYERS; ++j) {
+            fprintf(file, "-LAYER_%d\n", j+1);
+            for (int i = 0; i < TILES_Y; ++i) {
+                fputs("\t", file);
+                for (int k = 0; k < TILES_X; ++k)
+                    fprintf(file, "%d", tilemap[k][i][j].tile);
+                fputs("\n", file);
+            }
+        }
+        fclose(file);
+    }
+    else {
+        printf("Couldn't open file\n");
+    }
+}
+
+void read_file() {
+    char *file_content;
+    FILE *file = fopen("content/map.txt", "r");
+
+    if (file) {
+        fseek(file, 0, SEEK_END);
+        int len = ftell(file);
+        fseek(file, 0, SEEK_SET);
+
+        printf("length: %i\n", len);
+
+        file_content = calloc(len, sizeof(char));
+        fread((void *) file_content, sizeof(char), len, file);
+
+        printf("content: %s\n", file_content);
+
+        const int SEEK_TITLE = 0;
+        const int READ_TITLE = 1;
+        const int READ_CONTENT = 2;
+
+        int STATE = SEEK_TITLE;
+
+        char title_buffer[256] = {};
+        int title_index = 0;
+
+        int file_content_index = 0;
+        char cur = file_content[file_content_index];
+        do {
+            if (STATE == SEEK_TITLE) {
+                if (cur == '-') {
+                    STATE = READ_TITLE;
+                }
+            } else if (STATE == READ_TITLE) {
+                if (cur == '\n') {
+                    title_buffer[title_index + 1] = '\0';
+
+                    title_index = 0;
+                    STATE = READ_CONTENT;
+                } else {
+                    title_buffer[title_index++] = cur;
+                }
+            } else if (STATE == READ_CONTENT) {
+                if (strcmp(title_buffer, "LAYERS") == 0) {
+                    printf("Reading LAYERS\n");
+
+                    title_index = 0;
+                    STATE = SEEK_TITLE;
+                }
+                if (strcmp(title_buffer, "SPRITE_SHEET") == 0) {
+                    printf("Reading SPRITE_SHEET\n");
+
+                    title_index = 0;
+                    STATE = SEEK_TITLE;
+                }
+                if (strcmp(title_buffer, "SIZES") == 0) {
+                    printf("Reading SPRITE_SHEET\n");
+
+                    title_index = 0;
+                    STATE = SEEK_TITLE;
+                }
+            }
+
+            cur = file_content[++file_content_index];
+        } while (cur);
+
+        fclose(file);
+        free(file_content);
+    } else {
+        printf("Couldn't open file\n");
+    }
+}
+
 //Main Function
 
 int main(int argc, char *args[]) {
+
+    read_file();
 
     const int TILES_X = LEVEL_WIDTH / TILE_WIDTH;
     const int TILES_Y = LEVEL_HEIGHT / TILE_HEIGHT;
@@ -175,9 +287,8 @@ int main(int argc, char *args[]) {
     grid_t tilemap[TILES_X][TILES_Y][LAYERS];
     tile_t *tiles = (tile_t *) malloc(TILES * sizeof(tile_t));
 
-    for (int j = 0; j < LAYERS; ++j)
-        for (int i = 0; i < TILES_X * TILES_Y; ++i)
-                tilemap[0][i][j].tile = NO_TILE;
+    for (int i = 0; i < TILES_X * TILES_Y * LAYERS; ++i)
+        tilemap[0][0][i].tile = NO_TILE;
 
     SDL_Texture *texture = load_texture(renderer, "content/tile2.png");
     SDL_Rect *spritesheet = split_image(texture, 9, 5);
