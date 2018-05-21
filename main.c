@@ -9,23 +9,23 @@
  * const char *PATH = "C:\\Users\\David Sousa\\Documents\\Projects\\Games\\Tilemap-Editor\\content\\map.txt";
  * */
 
-
 //Const & Defines
-
-const int TILES = 9 * 5;
-
 const int SCREEN_WIDTH = 960;
 const int SCREEN_HEIGHT = 544;
-
-const int LEVEL_WIDTH = 960;
-const int LEVEL_HEIGHT = 544;
-
-const int TILE_WIDTH = 32;
-const int TILE_HEIGHT = 32;
-
 const int FPS = 60;
 
-#define NO_TILE (-1)
+#define MAX_TILE_X 200
+#define MAX_TILE_Y 200
+#define MAX_LAYERS 8
+#define EMPTY_TILE (-1)
+
+const int TILES = 9 * 5; //TODO: remove and put in another place
+
+const int LEVEL_WIDTH = 960; //TODO: put this in tilemap struct
+const int LEVEL_HEIGHT = 544; //TODO put this in tilemap struct
+
+const int TILE_WIDTH = 32; //TODO: put this in tilemap struct
+const int TILE_HEIGHT = 32; //TODO: put this in tilemap struct
 
 //Structures
 
@@ -35,11 +35,6 @@ typedef enum tools{
     Filter,
     Select,
 } tools_t;
-
-typedef struct grid {
-    int tile;
-    int x, y;
-} grid_t; // remove
 
 typedef struct tile {
     int id;
@@ -55,10 +50,11 @@ typedef struct layer {
 } layer_t;
 
 typedef struct tilemap {
-    grid_t data[200][200][200];
-    layer_t layerinfo[8];
+    int data[MAX_LAYERS][MAX_TILE_Y][MAX_TILE_X];
+    layer_t layerinfo[MAX_LAYERS];
     tile_t *tileinfo;
     int cur_tile, cur_layer;
+    int max_x, max_y, num_layers;
 } tilemap_t;
 
 //Util Functions
@@ -107,45 +103,62 @@ tile_t *get_tile(tile_t *tiles, int type){
     return NULL;
 }
 
-void render_tile(SDL_Renderer *renderer, grid_t *tilemap, tile_t *tiles){
+void render_tilemap(SDL_Renderer *renderer, tilemap_t *tilemap){
+    for (int l = 0; l < tilemap->num_layers; ++l)
+        for (int r = 0; r < tilemap->max_y; ++r)
+            for (int c = 0; c < tilemap->max_x; ++c) {
 
-    if(tilemap->tile == NO_TILE)
-        return;
+                if(tilemap->data[l][r][c] == EMPTY_TILE)
+                    continue;
 
-    tile_t *tile = get_tile(tiles, tilemap->tile);
-    SDL_Rect desR = (SDL_Rect){tilemap->x, tilemap->y, tile->w, tile->h};
-    SDL_RenderCopy(renderer, tile->texture, &tile->srcrect, &desR);
+                tile_t *tile = get_tile(tilemap->tileinfo, tilemap->data[l][r][c]);
+
+                int pos_x = c * tile->w;
+                int pos_y = r * tile->h;
+
+                SDL_Rect desR = (SDL_Rect){ pos_x, pos_y, tile->w, tile->h};
+                SDL_RenderCopy(renderer, tile->texture, &tile->srcrect, &desR);
+            }
 }
 
-void put_tile(grid_t *tilemap, int x, int y, int tile){
+void put_tile(tilemap_t *tilemap, int x, int y){
+    tile_t *tile = get_tile(tilemap->tileinfo, tilemap->cur_tile);
+    int c = (x / tile->w);
+    int r = (y / tile->h);
+    int l = tilemap->cur_layer;
 
-    if(tilemap->tile == tile)
+    if(tilemap->cur_tile == tilemap->data[l][r][c])
         return;
 
-    tilemap->tile = tile;
-    tilemap->x = snap_to_grid(x, TILE_WIDTH, 0);
-    tilemap->y = snap_to_grid(y, TILE_HEIGHT, 0);
+    tilemap->data[l][r][c] = tile->id;
 }
 
-void remove_tile(grid_t *tilemap){
+void remove_tile(tilemap_t *tilemap, int x, int y){
+    tile_t *tile = get_tile(tilemap->tileinfo, tilemap->cur_tile);
+    int c = (x / tile->w);
+    int r = (y / tile->h);
+    int l = tilemap->cur_layer;
 
-    if(tilemap->tile == NO_TILE)
+    if(tilemap->data[l][r][c] == EMPTY_TILE)
         return;
 
-    tilemap->tile = NO_TILE;
-    tilemap->x = tilemap->y = 0;
+    tilemap->data[l][r][c] = EMPTY_TILE;
 }
 
-void filter_tile(grid_t *tilemap,int *cur_tile){
+void filter_tile(tilemap_t *tilemap, int x, int y){
+    tile_t *tile = get_tile(tilemap->tileinfo, tilemap->cur_tile);
+    int c = (x / tile->w);
+    int r = (y / tile->h);
+    int l = tilemap->cur_layer;
 
-    if(tilemap->tile == NO_TILE)
+    if(tilemap->data[l][r][c] == EMPTY_TILE)
         return;
 
-    *cur_tile = tilemap->tile;
+    tilemap->cur_tile = tilemap->data[l][r][c];
 }
 
 void save_file(){
-    // FILE
+/*
     FILE *file = fopen("content/map.txt", "w");
 
     if(file){
@@ -180,6 +193,7 @@ void save_file(){
     else {
         printf("Couldn't open file\n");
     }
+    */
 }
 
 void read_file() {
@@ -188,15 +202,16 @@ void read_file() {
 
     if (file) {
         fseek(file, 0, SEEK_END);
-        int len = ftell(file);
+        int file_length = ftell(file);
         fseek(file, 0, SEEK_SET);
 
-        printf("length: %i\n", len);
+        file_content = calloc(file_length, sizeof(char));
+        fread((void *) file_content, sizeof(char), file_length, file);
 
-        file_content = calloc(len, sizeof(char));
-        fread((void *) file_content, sizeof(char), len, file);
-
+#if DEBUG
+        printf("length: %i\n", file_length);
         printf("content: %s\n", file_content);
+#endif
 
         const int SEEK_TITLE = 0;
         const int READ_TITLE = 1;
@@ -204,25 +219,25 @@ void read_file() {
 
         int STATE = SEEK_TITLE;
 
-        char title_buffer[256] = {};
         int title_index = 0;
+        char title_buffer[256] = {};
 
         int file_content_index = 0;
-        char cur = file_content[file_content_index];
+        char cur_file = file_content[file_content_index];
+
         do {
+
             if (STATE == SEEK_TITLE) {
-                if (cur == '-') {
+                if (cur_file == '-')
                     STATE = READ_TITLE;
-                }
             } else if (STATE == READ_TITLE) {
-                if (cur == '\n') {
+                if (cur_file == '\n') {
                     title_buffer[title_index + 1] = '\0';
 
                     title_index = 0;
                     STATE = READ_CONTENT;
-                } else {
-                    title_buffer[title_index++] = cur;
-                }
+                } else
+                    title_buffer[title_index++] = cur_file;
             } else if (STATE == READ_CONTENT) {
                 if (strcmp(title_buffer, "LAYERS") == 0) {
                     printf("Reading LAYERS\n");
@@ -230,40 +245,32 @@ void read_file() {
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 }
-                if (strcmp(title_buffer, "SPRITE_SHEET") == 0) {
+                else if (strcmp(title_buffer, "SPRITE_SHEET") == 0) {
                     printf("Reading SPRITE_SHEET\n");
 
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 }
-                if (strcmp(title_buffer, "SIZES") == 0) {
-                    printf("Reading SPRITE_SHEET\n");
+                else if (strcmp(title_buffer, "SIZES") == 0) {
+                    printf("Reading SIZES\n");
 
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 }
             }
 
-            cur = file_content[++file_content_index];
-        } while (cur);
+            cur_file = file_content[++file_content_index];
+        } while (cur_file);
 
         fclose(file);
         free(file_content);
-    } else {
+    } else
         printf("Couldn't open file\n");
-    }
 }
 
 //Main Function
 
 int main(int argc, char *args[]) {
-
-    read_file();
-
-    const int TILES_X = LEVEL_WIDTH / TILE_WIDTH;
-    const int TILES_Y = LEVEL_HEIGHT / TILE_HEIGHT;
-    const int LAYERS = 4;
-
     SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;
 
@@ -278,21 +285,14 @@ int main(int argc, char *args[]) {
     int prev_time = 0;
     int cur_time = 0;
     int quit = 0;
-
-    int cur_tile = 0;
-    int cur_layer = 0;
     int mouseX, mouseY;
 
     tools_t cur_tool = Brush;
-    grid_t tilemap[TILES_X][TILES_Y][LAYERS];
-    tile_t *tiles = (tile_t *) malloc(TILES * sizeof(tile_t));
 
-    for (int i = 0; i < TILES_X * TILES_Y * LAYERS; ++i)
-        tilemap[0][0][i].tile = NO_TILE;
-
+    //TODO: Put this in function too
     SDL_Texture *texture = load_texture(renderer, "content/tile2.png");
     SDL_Rect *spritesheet = split_image(texture, 9, 5);
-
+    tile_t *tiles = (tile_t *) malloc(TILES * sizeof(tile_t));
     for (int i = 0; i < TILES; ++i) {
         tiles[i].id = i;
         tiles[i].texture = texture;
@@ -303,6 +303,22 @@ int main(int argc, char *args[]) {
         tiles[i].w = tiles[i].h = TILE_WIDTH;
     }
 
+    //TODO: Put(fix) this in create_tilemap function
+    tilemap_t tilemap;
+    tilemap.max_x = LEVEL_WIDTH / TILE_WIDTH;
+    tilemap.max_y = LEVEL_HEIGHT / TILE_HEIGHT;
+    tilemap.num_layers = 4;
+    tilemap.cur_tile = 0;
+    tilemap.cur_layer = 0;
+
+    for (int l = 0; l < tilemap.num_layers; ++l)
+        for (int r = 0; r < tilemap.max_y; ++r)
+            for (int c = 0; c < tilemap.max_x; ++c)
+                tilemap.data[l][r][c] = EMPTY_TILE;
+
+    tilemap.tileinfo = tiles;
+
+    int cur_tile = 0;
     while (!quit){
         //Time loop
         prev_time = cur_time;
@@ -313,43 +329,44 @@ int main(int argc, char *args[]) {
         SDL_Event event;
         while (SDL_PollEvent(&event) != 0){
             SDL_Scancode scanCode = event.key.keysym.scancode;
-            int c, r, l;
             switch(event.type) {
                 case SDL_QUIT:
                     quit = 1;
                     break;
                 case SDL_KEYDOWN:
                     if(scanCode == SDL_SCANCODE_ESCAPE) quit = 1;
-                    if(scanCode == SDL_SCANCODE_1) cur_layer = 0;
-                    if(scanCode == SDL_SCANCODE_2) cur_layer = 1;
-                    if(scanCode == SDL_SCANCODE_3) cur_layer = 2;
-                    if(scanCode == SDL_SCANCODE_4) cur_layer = 3;
+                    if(scanCode == SDL_SCANCODE_1) tilemap.cur_layer = 0;
+                    if(scanCode == SDL_SCANCODE_2) tilemap.cur_layer = 1;
+                    if(scanCode == SDL_SCANCODE_3) tilemap.cur_layer = 2;
+                    if(scanCode == SDL_SCANCODE_4) tilemap.cur_layer = 3;
                     if ((event.key.keysym.mod & KMOD_CTRL)) {
                         if(scanCode == SDL_SCANCODE_B) cur_tool = Brush;
                         if(scanCode == SDL_SCANCODE_E) cur_tool = Erase;
                         if(scanCode == SDL_SCANCODE_F) cur_tool = Filter;
+                        if(scanCode == SDL_SCANCODE_S) cur_tool = Select;
                     }
                     break;
                 case SDL_MOUSEWHEEL:
+                    cur_tile = tilemap.cur_tile;
                     cur_tile += event.wheel.y;
-                    cur_tile = cur_tile < 0 ? TILES - 1 : cur_tile % TILES;
+                    tilemap.cur_tile = cur_tile < 0 ? TILES - 1 : cur_tile % TILES;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                 case SDL_MOUSEMOTION:
-                    c = (mouseX / TILE_WIDTH);
-                    r = (mouseY / TILE_HEIGHT);
-                    l = cur_layer;
 
                     if(event.button.button == SDL_BUTTON_LEFT){
                         switch(cur_tool){
                             case Brush:
-                                put_tile(&tilemap[c][r][l], mouseX, mouseY, cur_tile);
+                                put_tile(&tilemap, mouseX, mouseY);
                                 break;
                             case Erase:
-                                remove_tile(&tilemap[c][r][l]);
+                                remove_tile(&tilemap, mouseX, mouseY);
                                 break;
                             case Filter:
-                                filter_tile(&tilemap[c][r][l], &cur_tile);
+                                filter_tile(&tilemap, mouseX, mouseY);
+                                break;
+                            case Select:
+                                printf("SELECT\n");
                                 break;
                         }
                     }
@@ -364,25 +381,14 @@ int main(int argc, char *args[]) {
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
 
-        for (int j = 0; j < LAYERS; ++j)
-            for (int i = 0; i < TILES_X * TILES_Y; ++i){
-                    if(cur_tool == Brush && j == cur_layer){
-                        tile_t *tile = get_tile(tiles, cur_tile);
-                        SDL_Rect dstrect = {};
-                        dstrect.x = snap_to_grid(mouseX, TILE_WIDTH, 0);
-                        dstrect.y = snap_to_grid(mouseY, TILE_HEIGHT, 0);
-                        dstrect.w = dstrect.h = TILE_WIDTH;
-                        SDL_RenderCopy(renderer, tile->texture, &tile->srcrect, &dstrect);
-                    }
-                    render_tile(renderer, &tilemap[0][i][j], tiles);
-            }
-
+        render_tilemap(renderer, &tilemap);
         SDL_RenderPresent(renderer);
 
         if(cur_time < FPS)
             SDL_Delay(cur_time - (Uint32)prev_time);
     }
 
+    free(spritesheet);
     free(tiles);
 
     SDL_DestroyTexture(texture);
