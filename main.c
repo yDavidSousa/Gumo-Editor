@@ -224,6 +224,7 @@ void read_file(tilemap_t *tilemap, char *file_path) {
 
         file_content = calloc((size_t)file_length, sizeof(char));
         fread((void *) file_content, sizeof(char), (size_t)file_length, file);
+        fclose(file);
 
 #if DEBUG
         printf("length: %i\n", file_length);
@@ -255,42 +256,40 @@ void read_file(tilemap_t *tilemap, char *file_path) {
                 } else
                     title_buffer[title_index++] = cur_file;
             } else if (STATE == READ_CONTENT) {
-                //printf("TITLE: {%s}\n", title_buffer);
-
                 if(strcmp(title_buffer, "OPTIONS") == 0){
-                    printf("-> reading OPTIONS:\n");
-                    fseek(file, file_content_index, SEEK_SET);
+                    printf("-> Reading OPTIONS:\n");
 
-                    fscanf(file,"%d", &tilemap->num_layers);
-                    fscanf(file,"%d", &tilemap->width);
-                    fscanf(file,"%d", &tilemap->height);
-                    fscanf(file,"%d", &tilemap->max_x);
+                    sscanf(file_content + file_content_index, "%d\n%d\n%d\n%d", &tilemap->num_layers, &tilemap->width, &tilemap->height, &tilemap->max_x);
 
-                    printf("num_layer: %d\n", tilemap->num_layers);
-                    printf("width: %d\n", tilemap->width);
-                    printf("height: %d\n", tilemap->height);
-                    printf("tile size: %d\n", tilemap->max_x);
+                    //sscanf(&file_content[file_content_index], "%i", &tilemap->num_layers);
+                    //sscanf(&file_content[file_content_index + 8], "%i", &tilemap->width);
+                    //sscanf(&file_content[file_content_index + 16], "%i", &tilemap->height);
+                    //sscanf(&file_content[file_content_index + 24], "%i", &tilemap->max_x);
 
-                    file_content_index = ftell(file) - 7;
-                    cur_file = file_content[file_content_index];
-                    printf("|%c|\n", cur_file);
+#if DEBUG
+                    printf("num_layer: %i\n", tilemap->num_layers);
+                    printf("width: %i\n", tilemap->width);
+                    printf("height: %i\n", tilemap->height);
+                    printf("tile size: %i\n", tilemap->max_x);
+#endif
 
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 } else if (strcmp(title_buffer, "LAYERS") == 0) {
-                        printf("-> reading LAYERS:\n");
+                        printf("-> Reading LAYERS:\n");
                     fseek(file, file_content_index, SEEK_SET);
 
                     for (int i = 0; i < tilemap->num_layers; ++i){
-                        fscanf(file, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
-                        printf("layerinfo - name: %s index: %d\n", tilemap->layerinfo[i].name, tilemap->layerinfo[i].index);
+                        sscanf(file_content + file_content_index, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
+                        //fscanf(file, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
+                        printf("Name: %s Index: %d\n", tilemap->layerinfo[i].name, tilemap->layerinfo[i].index);
                     }
 
                     //file_content_index = ftell(file);
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 } else if (strcmp(title_buffer, "SPRITE_SHEET") == 0) {
-                    printf("-> reading SPRITE_SHEET:\n");
+                    printf("-> Reading SPRITE_SHEET:\n");
                     fseek(file, file_content_index, SEEK_SET);
 
                     fscanf(file, "%s", tilemap->tile_spritesheet);
@@ -300,14 +299,14 @@ void read_file(tilemap_t *tilemap, char *file_path) {
                     title_index = 0;
                     STATE = SEEK_TITLE;
                 } else if (strcmp(title_buffer, "LAYER_1") == 0) {
-                    printf("-> reading LAYER_1:\n");
+                    printf("-> Reading LAYER_1:\n");
                     fseek(file, file_content_index+2, SEEK_SET);
 
                     for (int l = 0; l < tilemap->num_layers; ++l) {
                         for (int r = 0; r < tilemap->max_y; ++r) {
                             for (int c = 0; c < tilemap->max_x; ++c) {
                                 fscanf(file, "%d ", &tilemap->data[l][r][c]);
-                                printf("|%d|", tilemap->data[l][r][c]);
+                                //printf("|%d|", tilemap->data[l][r][c]);
                             }
                         }
                     }
