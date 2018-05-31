@@ -184,24 +184,30 @@ void save_file(tilemap_t *tilemap, char *file_path){
         fprintf(file,"\t%d //height\n", tilemap->height);
         fprintf(file,"\t%d //tile size\n", 32);
 
+        fprintf(file, "\n");
+
         //WRITE LAYERS
-        fprintf(file, "-LAYERS\n");
+        fprintf(file, "-LAYERS_INFO\n");
         for (int i = 0; i < tilemap->num_layers; ++i)
             fprintf(file, "\tLAYER_%d %d\n", i+1, i);
+
+        fprintf(file, "\n");
 
         //WRITE SPRITE_SHEET
         fprintf(file, "-SPRITE_SHEET\n");
         fprintf(file, "\tcontent/tile2.png");
         fprintf(file, " //sprite sheet path\n");
 
+        fprintf(file, "\n");
+
         //WRITE TILEMAP PER LAYERS
         for (int l = 0; l < tilemap->num_layers; ++l) {
-            fprintf(file, "-LAYER_%d\n", l+1);
+            fprintf(file, "LAYER_%d\n", l+1);
             for (int r = 0; r < tilemap->max_y; ++r) {
                 fputs("\t", file);
                 for (int c = 0; c < tilemap->max_x; ++c)
                     fprintf(file, "%d ", tilemap->data[l][r][c]);
-                fputs("\n", file);
+                fputs("\n\n", file);
             }
         }
         printf("---- SAVED ----\n");
@@ -214,118 +220,41 @@ void save_file(tilemap_t *tilemap, char *file_path){
 }
 
 void read_file(tilemap_t *tilemap, char *file_path) {
-    char *file_content;
     FILE *file = fopen(file_path, "r");
 
-    if (file) {
-        fseek(file, 0, SEEK_END);
-        int file_length = ftell(file);
-        fseek(file, 0, SEEK_SET);
+    if (!file){
+        printf("Couldn't open file\n");
+        return;
+    }
 
-        file_content = calloc((size_t)file_length, sizeof(char));
-        fread((void *) file_content, sizeof(char), (size_t)file_length, file);
-        fclose(file);
+    char buffer[256] = {};
 
-#if DEBUG
-        printf("length: %i\n", file_length);
-        printf("content: %s\n", file_content);
-#endif
+    while(!feof(file)){
+        fscanf(file, "%s", buffer);
 
-        const int SEEK_TITLE = 0;
-        const int READ_TITLE = 1;
-        const int READ_CONTENT = 2;
-
-        int STATE = SEEK_TITLE;
-
-        int title_index = 0;
-        char title_buffer[256] = {};
-
-        int file_content_index = 0;
-        char cur_file = file_content[file_content_index];
-
-        do {
-            if (STATE == SEEK_TITLE) {
-                if (cur_file == '-')
-                    STATE = READ_TITLE;
-            } else if (STATE == READ_TITLE) {
-                if (cur_file == '\n') {
-                    title_buffer[title_index] = '\0';
-
-                    title_index = 0;
-                    STATE = READ_CONTENT;
-                } else
-                    title_buffer[title_index++] = cur_file;
-            } else if (STATE == READ_CONTENT) {
-                if(strcmp(title_buffer, "OPTIONS") == 0){
-                    printf("-> Reading OPTIONS:\n");
-
-                    sscanf(file_content + file_content_index, "%d\n%d\n%d\n%d", &tilemap->num_layers, &tilemap->width, &tilemap->height, &tilemap->max_x);
-
-                    //sscanf(&file_content[file_content_index], "%i", &tilemap->num_layers);
-                    //sscanf(&file_content[file_content_index + 8], "%i", &tilemap->width);
-                    //sscanf(&file_content[file_content_index + 16], "%i", &tilemap->height);
-                    //sscanf(&file_content[file_content_index + 24], "%i", &tilemap->max_x);
-
-#if DEBUG
-                    printf("num_layer: %i\n", tilemap->num_layers);
-                    printf("width: %i\n", tilemap->width);
-                    printf("height: %i\n", tilemap->height);
-                    printf("tile size: %i\n", tilemap->max_x);
-#endif
-
-                    title_index = 0;
-                    STATE = SEEK_TITLE;
-                } else if (strcmp(title_buffer, "LAYERS") == 0) {
-                        printf("-> Reading LAYERS:\n");
-                    fseek(file, file_content_index, SEEK_SET);
-
-                    for (int i = 0; i < tilemap->num_layers; ++i){
-                        sscanf(file_content + file_content_index, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
-                        //fscanf(file, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
-                        printf("Name: %s Index: %d\n", tilemap->layerinfo[i].name, tilemap->layerinfo[i].index);
-                    }
-
-                    //file_content_index = ftell(file);
-                    title_index = 0;
-                    STATE = SEEK_TITLE;
-                } else if (strcmp(title_buffer, "SPRITE_SHEET") == 0) {
-                    printf("-> Reading SPRITE_SHEET:\n");
-                    fseek(file, file_content_index, SEEK_SET);
-
-                    fscanf(file, "%s", tilemap->tile_spritesheet);
-                    printf("spritesheet: %s\n", tilemap->tile_spritesheet);
-
-                    //file_content_index = ftell(file);
-                    title_index = 0;
-                    STATE = SEEK_TITLE;
-                } else if (strcmp(title_buffer, "LAYER_1") == 0) {
-                    printf("-> Reading LAYER_1:\n");
-                    fseek(file, file_content_index+2, SEEK_SET);
-
-                    for (int l = 0; l < tilemap->num_layers; ++l) {
-                        for (int r = 0; r < tilemap->max_y; ++r) {
-                            for (int c = 0; c < tilemap->max_x; ++c) {
-                                fscanf(file, "%d ", &tilemap->data[l][r][c]);
-                                //printf("|%d|", tilemap->data[l][r][c]);
-                            }
-                        }
-                    }
-
-                    //file_content_index = ftell(file);
-                    title_index = 0;
-                    STATE = SEEK_TITLE;
+        if(strcmp(buffer, "-OPTIONS") == 0){
+            fscanf(file, "%d %*[^\n]", &tilemap->num_layers);
+            fscanf(file, "%d %*[^\n]", &tilemap->width);
+            fscanf(file, "%d %*[^\n]", &tilemap->height);
+            //fscanf(file, "%d %*[^\n]", &tilemap->width_tiles);
+        } else if(strcmp(buffer, "-LAYERS_INFO") == 0){
+            for (int i = 0; i < tilemap->num_layers; ++i) {
+                fscanf(file, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
+            }
+        } else if(strcmp(buffer, "-SPRITE_SHEET") == 0){
+            fscanf(file, "%s %*[^\n]", tilemap->tile_spritesheet);
+        } else {
+            for (int i = 0; i < tilemap->num_layers; ++i) {
+                if(strcmp(buffer, tilemap->layerinfo[i].name) == 0){
+                    for (int r = 0; r < tilemap->max_y; ++r)
+                        for (int c = 0; c < tilemap->max_x; ++c)
+                            fscanf(file, "%d", &tilemap->data[i][r][c]);
                 }
             }
-
-            //printf("file content index: %d\n", file_content_index);
-            cur_file = file_content[++file_content_index];
-        } while (cur_file != EOF);
-
-        fclose(file);
-        free(file_content);
-    } else {
-        printf("Couldn't open file\n");
+        }
     }
+
+    fclose(file);
 }
 
 //Main Function
