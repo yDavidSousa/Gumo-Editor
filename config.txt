@@ -1,0 +1,10 @@
+author David Sousa
+version 0.1
+
+title Tilemap Editor
+icon content/image
+fullscreen false
+resizable false
+borderless false
+map_width 960
+map_height 544
