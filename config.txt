@@ -2,7 +2,7 @@ author David Sousa
 version 0.1
 
 title Tilemap Editor
-icon content/image
+icon_source ../content/icon_source.png
 fullscreen false
 resizable false
 borderless false

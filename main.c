@@ -13,10 +13,13 @@
 //Const & Defines
 const int FPS = 60;
 
-#define MAX_TILE_X 200
-#define MAX_TILE_Y 200
-#define MAX_LAYER 8
-#define MAX_TILESET 4
+#define MAX_COLUMNS 200
+#define MAX_ROWS 200
+#define MAX_LAYERS 8
+#define MAX_TILESETS 4
+
+#define true 1
+#define false 0
 
 #define EMPTY_TILE (-1)
 
@@ -24,7 +27,7 @@ const int FPS = 60;
 
 typedef struct window {
     char title[256];
-    char icon[256];
+    char icon_source[256];
     int width, height;
     int x, y;
     Uint32 flags;
@@ -51,7 +54,7 @@ typedef struct tileinfo {
 typedef struct layerinfo {
     int index;
     char name[256];
-    int visible;
+    int hidden;
 } layerinfo_t;
 
 typedef struct tileset{
@@ -65,11 +68,11 @@ typedef struct tileset{
 
 typedef struct tilemap {
     char name[256];
-    int tile_data[MAX_LAYER][MAX_TILE_Y][MAX_TILE_X];
-    int tileset_data[MAX_LAYER][MAX_TILE_Y][MAX_TILE_X];
-    layerinfo_t layerinfo[MAX_LAYER];
-    tileset_t tileset[MAX_TILESET];
-    int max_x, max_y, num_layers, num_tilesets;
+    int tile_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
+    int tileset_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
+    layerinfo_t layerinfo[MAX_LAYERS];
+    tileset_t tileset[MAX_TILESETS];
+    int num_columns, num_rows, num_layers, num_tilesets;
     int map_width, map_height;
     int tile_width, tile_height;
     int cur_layer, cur_tileset;
@@ -110,6 +113,12 @@ int snap_to_grid(const int value, const int increment, const int offset){
     return (value/increment) * increment + offset;
 }
 
+void set_window_icon(SDL_Window *window, const char *path){
+    SDL_Surface *surface = IMG_Load(path);
+    SDL_SetWindowIcon(window, surface);
+    SDL_FreeSurface(surface);
+}
+
 //Tilemap Functions
 
 void set_tileset(tilemap_t *tilemap, const int tileset){
@@ -123,7 +132,7 @@ void set_tileset(tilemap_t *tilemap, const int tileset){
 
 void add_tileset(tilemap_t *tilemap, const char *name, const char *image_source, const int tile_width, const int tile_height){
 
-    if(tilemap->num_tilesets == MAX_TILESET){
+    if(tilemap->num_tilesets == MAX_TILESETS){
         printf("Maximum allowed number of tilesets exceeded!\n");
         return;
     }
@@ -168,7 +177,7 @@ void remove_tileset(tileset_t *tileset){
     tileset->tile_width = 0;
     tileset->tile_height = 0;
     free(tileset->tileinfo);
-    SDL_DestroyTexture(tileset->.image_texture);
+    SDL_DestroyTexture(tileset->image_texture);
 }
 
 void set_layer(tilemap_t *tilemap, const int layer){
@@ -180,9 +189,13 @@ void set_layer(tilemap_t *tilemap, const int layer){
     tilemap->cur_layer = layer;
 }
 
+void change_layer_visibility(tilemap_t *tilemap, const int layer){
+    tilemap->layerinfo[layer].hidden = tilemap->layerinfo[layer].hidden == true ? false : true;
+}
+
 void add_layer(tilemap_t *tilemap, const char *name){
 
-    if(tilemap->num_layers == MAX_LAYER){
+    if(tilemap->num_layers == MAX_LAYERS){
         printf("Maximum allowed number of layers exceeded!\n");
         return;
     }
@@ -190,10 +203,11 @@ void add_layer(tilemap_t *tilemap, const char *name){
     const int index = tilemap->num_layers;
     strcpy(tilemap->layerinfo[index].name, name);
     tilemap->layerinfo[index].index = index;
+    tilemap->layerinfo[index].hidden = false;
     tilemap->num_layers++;
 
-    for (int r = 0; r < tilemap->max_y; ++r)
-        for (int c = 0; c < tilemap->max_x; ++c){
+    for (int r = 0; r < tilemap->num_rows; ++r)
+        for (int c = 0; c < tilemap->num_columns; ++c){
             tilemap->tile_data[index][r][c] = EMPTY_TILE;
             tilemap->tileset_data[index][r][c] = EMPTY_TILE;
         }
@@ -204,8 +218,8 @@ void remove_layer(tilemap_t *tilemap, const int index){
     for (int i = index; i < tilemap->num_layers - 1; ++i) {
         tilemap->layerinfo[i] = tilemap->layerinfo[i+1];
 
-        for (int r = 0; r < tilemap->max_y; ++r)
-            for (int c = 0; c < tilemap->max_x; ++c){
+        for (int r = 0; r < tilemap->num_rows; ++r)
+            for (int c = 0; c < tilemap->num_columns; ++c){
                 tilemap->tileset_data[i][r][c] = tilemap->tileset_data[i+1][r][c];
                 tilemap->tile_data[i][r][c] = tilemap->tile_data[i+1][r][c];
             }
@@ -222,8 +236,8 @@ tilemap_t *create_tilemap(const char *name, const int width, const int height, c
     tilemap->map_height = height;
     tilemap->tile_width = tile_width;
     tilemap->tile_height = tile_height;
-    tilemap->max_x = width / tile_width;
-    tilemap->max_y = height / tile_height;
+    tilemap->num_columns = width / tile_width;
+    tilemap->num_rows = height / tile_height;
     tilemap->num_layers = 0;
     tilemap->num_tilesets = 0;
     tilemap->cur_layer = 0;
@@ -239,8 +253,12 @@ void render_tilemap(SDL_Renderer *renderer, tilemap_t *tilemap){
     int width_buffer, height_buffer;
 
     for (int l = 0; l < tilemap->num_layers; ++l)
-        for (int r = 0; r < tilemap->max_y; ++r)
-            for (int c = 0; c < tilemap->max_x; ++c) {
+
+        for (int r = 0; r < tilemap->num_rows; ++r)
+            for (int c = 0; c < tilemap->num_columns; ++c) {
+
+                //TODO(David): Check this later.
+                if(tilemap->layerinfo[l].hidden) continue;
 
                 if(tilemap->tileset_data[l][r][c] == EMPTY_TILE || tilemap->tile_data[l][r][c] == EMPTY_TILE)
                     continue;
@@ -362,8 +380,10 @@ void save_tilemap(tilemap_t *tilemap, const char *path){
     }
 
     fprintf(file, "#TILEMAP_INFO\n");
-    fprintf(file,"\t%d //number of layers\n", tilemap->num_layers);
     fprintf(file,"\t%d //number of tilesets\n", tilemap->num_tilesets);
+    fprintf(file,"\t%d //number of layers\n", tilemap->num_layers);
+    fprintf(file,"\t%d //number of columns\n", tilemap->num_columns);
+    fprintf(file,"\t%d //number of rows\n", tilemap->num_rows);
     fprintf(file,"\t%d //map_width\n", tilemap->map_width);
     fprintf(file,"\t%d //map_height\n", tilemap->map_height);
     fprintf(file,"\t%d //tile_width\n", tilemap->tile_width);
@@ -372,19 +392,28 @@ void save_tilemap(tilemap_t *tilemap, const char *path){
 
     fprintf(file, "#LAYERS_INFO\n");
     for (int i = 0; i < tilemap->num_layers; ++i)
-        fprintf(file, "\t%s %d\n", tilemap->layerinfo[i].name, tilemap->layerinfo[i].index);
+        fprintf(file, "\t%s %d %d\n",
+            tilemap->layerinfo[i].name,
+            tilemap->layerinfo[i].index,
+            tilemap->layerinfo[i].hidden
+        );
     fprintf(file, "\n");
 
     fprintf(file, "#TILESETS_INFO\n");
     for (int i = 0; i < tilemap->num_tilesets; ++i)
-        fprintf(file, "\t%s %s %d\n", tilemap->tileset[i].name, tilemap->tileset[i].image_source, i);
+        fprintf(file, "\t%s %s %d %d\n",
+            tilemap->tileset[i].name,
+            tilemap->tileset[i].image_source,
+            tilemap->tileset[i].tile_width,
+            tilemap->tileset[i].tile_width
+        );
     fprintf(file, "\n");
 
     for (int l = 0; l < tilemap->num_layers; ++l) {
         fprintf(file, "%s\n", tilemap->layerinfo[l].name);
-        for (int r = 0; r < tilemap->max_y; ++r) {
+        for (int r = 0; r < tilemap->num_rows; ++r) {
             fputs("\t", file);
-            for (int c = 0; c < tilemap->max_x; ++c)
+            for (int c = 0; c < tilemap->num_columns; ++c)
                 fprintf(file, "%d,%d ", tilemap->tileset_data[l][r][c],tilemap->tile_data[l][r][c]);
             fputs("\n\n", file);
         }
@@ -407,24 +436,35 @@ void load_tilemap(tilemap_t *tilemap, const char *file_path) {
         fscanf(file, "%s", buffer);
 
         if(strcmp(buffer, "#TILEMAP_INFO") == 0){
-            fscanf(file, "%d %*[^\n]", &tilemap->num_layers);
             fscanf(file, "%d %*[^\n]", &tilemap->num_tilesets);
+            fscanf(file, "%d %*[^\n]", &tilemap->num_layers);
+            fscanf(file, "%d %*[^\n]", &tilemap->num_columns);
+            fscanf(file, "%d %*[^\n]", &tilemap->num_rows);
             fscanf(file, "%d %*[^\n]", &tilemap->map_width);
             fscanf(file, "%d %*[^\n]", &tilemap->map_height);
             fscanf(file, "%d %*[^\n]", &tilemap->tile_width);
             fscanf(file, "%d %*[^\n]", &tilemap->tile_height);
         } else if(strcmp(buffer, "#LAYERS_INFO") == 0){
             for (int i = 0; i < tilemap->num_layers; ++i) {
-                fscanf(file, "%s %d", tilemap->layerinfo[i].name, &tilemap->layerinfo[i].index);
+                fscanf(file, "%s %d %d",
+                   tilemap->layerinfo[i].name,
+                   &tilemap->layerinfo[i].index,
+                   &tilemap->layerinfo[i].hidden
+                );
             }
         } else if(strcmp(buffer, "#TILESETS_INFO") == 0){
             for (int i = 0; i < tilemap->num_tilesets; ++i)
-                fscanf(file, "%s %s %d", tilemap->tileset[i].name, tilemap->tileset[i].image_source, &tilemap->cur_tileset);
+                fscanf(file, "%s %s %d %d",
+                   tilemap->tileset[i].name,
+                   tilemap->tileset[i].image_source,
+                   &tilemap->tileset[i].tile_width,
+                   &tilemap->tileset[i].tile_height
+                );
         } else {
             for (int i = 0; i < tilemap->num_layers; ++i) {
                 if(strcmp(buffer, tilemap->layerinfo[i].name) == 0){
-                    for (int r = 0; r < tilemap->max_y; ++r)
-                        for (int c = 0; c < tilemap->max_x; ++c)
+                    for (int r = 0; r < tilemap->num_rows; ++r)
+                        for (int c = 0; c < tilemap->num_columns; ++c)
                             fscanf(file, "%d,%d ", &tilemap->tileset_data[i][r][c], &tilemap->tile_data[i][r][c]);
                 }
             }
@@ -470,15 +510,15 @@ void read_config_file(config_t *config, const char *path){
             fscanf(file, " %[^\n]s", config->window.title);
             continue;
         }
-        if(strcmp(buffer, "icon") == 0){
-            fscanf(file, "%s", config->window.icon);
+        if(strcmp(buffer, "icon_source") == 0){
+            fscanf(file, " %[^\n]s", config->window.icon_source);
             continue;
         }
         if(strcmp(buffer, "fullscreen") == 0){
             fscanf(file, "%s", buffer);
 
             if(strcmp(buffer, "true") == 0){
-                config->window.flags |= SDL_WINDOW_FULLSCREEN;
+                config->window.flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
             }
             continue;
         }
@@ -543,6 +583,8 @@ int main(int argc, char *args[]) {
             config.window.flags
     );
 
+    set_window_icon(window, config.window.icon_source);
+
     renderer = SDL_CreateRenderer(
             window,
             -1,
@@ -587,6 +629,7 @@ int main(int argc, char *args[]) {
                     break;
                 case SDL_KEYDOWN:
                     if(scanCode == SDL_SCANCODE_0) remove_layer(tilemap, 0);
+                    if(scanCode == SDL_SCANCODE_9) change_layer_visibility(tilemap, 0);
                     if(scanCode == SDL_SCANCODE_ESCAPE) quit = 1;
                     if(scanCode == SDL_SCANCODE_F1) set_tileset(tilemap, 0);
                     if(scanCode == SDL_SCANCODE_F2) set_tileset(tilemap, 1);
