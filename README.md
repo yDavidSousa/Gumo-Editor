@@ -1,5 +1,6 @@
 # Gumo Editor
 
+![Gumo Logo](/data/icons/gumo64.png)
 #### Gumo Editor is a generic level editor(still in development) for indie game developers.
 
 *It's being developed using pure C language and [SDL 2.0] library.*
