@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9)
-project(Tilemap C)
+project(Gumo_Editor C)
 
 add_definitions(-DDEBUG)
 
@@ -15,10 +15,10 @@ set(deps_lib_dir "${CMAKE_SOURCE_DIR}/deps/lib/${plataform}")
 ### LIBS
 set(libs "-lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer")
 
-include_directories("include;${deps_include_dir}")
-set(SOURCE_FILES main.c)
-add_executable(Tilemap ${SOURCE_FILES})
-target_link_libraries(Tilemap ${libs})
+include_directories("src;${deps_include_dir}")
+set(SOURCE_FILES src/utils.h src/layer.h src/tileset.h src/tilemap.h src/utils.c src/tilemap.c main.c)
+add_executable(Gumo_Editor ${SOURCE_FILES})
+target_link_libraries(Gumo_Editor ${libs})
 
 file(COPY ${deps_bin_dir}/ DESTINATION .)
 file(COPY content DESTINATION .)
