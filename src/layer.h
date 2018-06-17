@@ -9,12 +9,12 @@ typedef enum layer_type {
     ENTITIES
 } layer_type_t;
 
-typedef struct layerinfo {
+typedef struct layer_data {
     int index;
     char name[256];
     layer_type_t type;
     int locked;
     int hidden;
-} layerinfo_t;
+} layer_data_t;
 
 #endif

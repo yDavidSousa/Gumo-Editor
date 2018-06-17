@@ -45,12 +45,6 @@ void free_cursor(cursor_ui_t cursor){
     free(cursor.src_rect);
 }
 
-void set_window_icon(SDL_Window *window, const char *path){
-    SDL_Surface *surface = IMG_Load(path);
-    SDL_SetWindowIcon(window, surface);
-    SDL_FreeSurface(surface);
-}
-
 void save_tilemap(tilemap_t *tilemap, const char *path){
     char file_name[80];
     strcpy(file_name, path);
@@ -80,7 +74,7 @@ void save_tilemap(tilemap_t *tilemap, const char *path){
     char layer_type_buffer[80];
     for (int i = 0; i < tilemap->num_layers; ++i){
 
-        switch (tilemap->layerinfo[i].type){
+        switch (tilemap->layers[i].type){
             case TILES:
                 strcpy(layer_type_buffer, TILES_LAYER_TYPE);
                 break;
@@ -90,11 +84,11 @@ void save_tilemap(tilemap_t *tilemap, const char *path){
         }
 
         fprintf(file, "\t%s %d %s %d %d\n",
-                tilemap->layerinfo[i].name,
-                tilemap->layerinfo[i].index,
+                tilemap->layers[i].name,
+                tilemap->layers[i].index,
                 layer_type_buffer,
-                tilemap->layerinfo[i].locked,
-                tilemap->layerinfo[i].hidden
+                tilemap->layers[i].locked,
+                tilemap->layers[i].hidden
         );
     }
 
@@ -103,24 +97,47 @@ void save_tilemap(tilemap_t *tilemap, const char *path){
     fprintf(file, "#TILESETS_INFO\n");
     for (int i = 0; i < tilemap->num_tilesets; ++i)
         fprintf(file, "\t%s %s %d %d\n",
-            tilemap->tileset[i].name,
-            tilemap->tileset[i].image_source,
-            tilemap->tileset[i].tile_width,
-            tilemap->tileset[i].tile_width
+            tilemap->tilesets[i].name,
+            tilemap->tilesets[i].image.source,
+            tilemap->tilesets[i].tile_width,
+            tilemap->tilesets[i].tile_width
         );
     fprintf(file, "\n");
 
     for (int l = 0; l < tilemap->num_layers; ++l) {
-        fprintf(file, "%s\n", tilemap->layerinfo[l].name);
-        for (int r = 0; r < tilemap->num_rows; ++r) {
-            fputs("\t", file);
-            for (int c = 0; c < tilemap->num_columns; ++c)
-                fprintf(file, "%d,%d ",
-                    tilemap->tileset_data[l][r][c],
-                    tilemap->tile_data[l][r][c]
-                );
-            fputs("\n\n", file);
+        fprintf(file, "%s\n", tilemap->layers[l].name);
+
+        if(tilemap->layers[l].type == TILES){
+            for (int r = 0; r < tilemap->num_rows; ++r) {
+                fputs("\t", file);
+                for (int c = 0; c < tilemap->num_columns; ++c)
+                    fprintf(file, "%d,%d ",
+                            tilemap->tileset_data[l][r][c],
+                            tilemap->tile_data[l][r][c]
+                    );
+                fputs("\n", file);
+            }
         }
+
+        if(tilemap->layers[l].type == ENTITIES){
+            for (int r = 0; r < tilemap->num_rows; ++r) {
+                for (int c = 0; c < tilemap->num_columns; ++c){
+                    if(tilemap->entity_data[l][r][c] != EMPTY_TILE){
+                        int index =  tilemap->entity_data[l][r][c];
+                        fprintf(file, "\t%d %s %d %d %d %d\n",
+                                tilemap->entities[index].id,
+                                tilemap->entities[index].name,
+                                c * tilemap->tile_width,
+                                r * tilemap->tile_height,
+                                tilemap->entities[index].w,
+                                tilemap->entities[index].h
+                        );
+                    }
+                }
+            }
+        }
+
+        fputs("\n", file);
     }
 
     printf("File saved with successful!\n");
@@ -152,34 +169,34 @@ void load_tilemap(tilemap_t *tilemap, const char *file_path) {
             char layer_type_buffer[80];
             for (int i = 0; i < tilemap->num_layers; ++i) {
                 fscanf(file, "%s %d %s %d %d",
-                   tilemap->layerinfo[i].name,
-                   &tilemap->layerinfo[i].index,
+                   tilemap->layers[i].name,
+                   &tilemap->layers[i].index,
                    layer_type_buffer,
-                   &tilemap->layerinfo[i].locked,
-                   &tilemap->layerinfo[i].hidden
+                   &tilemap->layers[i].locked,
+                   &tilemap->layers[i].hidden
                 );
 
-                if(strcmp(layer_type_buffer, TILES_LAYER_TYPE))
-                    tilemap->layerinfo[i].type = TILES;
-                else if (strcmp(layer_type_buffer, ENTITIES_LAYER_TYPE))
-                    tilemap->layerinfo[i].type = ENTITIES;
+                if(strcmp(layer_type_buffer, TILES_LAYER_TYPE) == 0)
+                    tilemap->layers[i].type = TILES;
+                else if (strcmp(layer_type_buffer, ENTITIES_LAYER_TYPE) == 0)
+                    tilemap->layers[i].type = ENTITIES;
             }
         } else if(strcmp(buffer, "#TILESETS_INFO") == 0){
             for (int i = 0; i < tilemap->num_tilesets; ++i)
                 fscanf(file, "%s %s %d %d",
-                   tilemap->tileset[i].name,
-                   tilemap->tileset[i].image_source,
-                   &tilemap->tileset[i].tile_width,
-                   &tilemap->tileset[i].tile_height
+                   tilemap->tilesets[i].name,
+                   tilemap->tilesets[i].image.source,
+                   &tilemap->tilesets[i].tile_width,
+                   &tilemap->tilesets[i].tile_height
                 );
         } else {
             for (int i = 0; i < tilemap->num_layers; ++i) {
-                if(strcmp(buffer, tilemap->layerinfo[i].name) == 0){
+                if(strcmp(buffer, tilemap->layers[i].name) == 0){
                     for (int r = 0; r < tilemap->num_rows; ++r)
                         for (int c = 0; c < tilemap->num_columns; ++c)
                             fscanf(file, "%d,%d ",
-                               &tilemap->tileset_data[i][r][c],
-                               &tilemap->tile_data[i][r][c]
+                                   &tilemap->tileset_data[i][r][c],
+                                   &tilemap->tile_data[i][r][c]
                             );
                     break;
                 }
@@ -296,7 +313,6 @@ int main(int argc, char *args[]) {
             config.window.height,
             config.window.flags
     );
-    set_window_icon(window, config.window.icon_source);
 
     Uint32 renderer_flags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
     renderer = SDL_CreateRenderer(window, -1, renderer_flags);
@@ -310,17 +326,30 @@ int main(int argc, char *args[]) {
     tools_t cur_tool = Brush;
     tilemap_t *tilemap = create_tilemap("Tilemap_01", 960, 544, 32, 32);
 
-    //Add and remove layerinfo
+    //Change window title with tilemap name
+    char window_name[DEFAULT_FILE_NAME_LEN];
+    strcpy(window_name, tilemap->name);
+    strcat(window_name, " - ");
+    strcat(window_name, config.window.title);
+    SDL_SetWindowTitle(window, window_name);
+
+    //Add and remove layer_data
     add_layer(tilemap, "Layer_1", TILES);
     add_layer(tilemap, "Layer_2", TILES);
     add_layer(tilemap, "Layer_3", ENTITIES);
     add_layer(tilemap, "Layer_4", ENTITIES);
 
-    //Add and remove tileset
-    add_tileset(tilemap, "Tileset_01", "content/tile.png", 32, 32);
-    load_tileset(renderer, &tilemap->tileset[tilemap->cur_tileset]);
-    add_tileset(tilemap, "Tileset_02", "content/pokemon_tileset.png", 32, 32);
-    load_tileset(renderer, &tilemap->tileset[tilemap->cur_tileset]);
+    //Add and remove tilesets
+    add_tileset(tilemap, "Tileset_8x8", "content/tileset_8x8.png", 8, 8);
+    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
+    add_tileset(tilemap, "Tileset_16x16", "content/tileset_16x16.png", 16, 16);
+    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
+    add_tileset(tilemap, "Tileset_32x32", "content/tileset_32x32.png", 32, 32);
+    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
+
+    //Add and remove Entities
+    add_entity(tilemap, "Player");
+    add_entity(tilemap, "Enemy");
 
     //Cursor
     SDL_ShowCursor(SDL_DISABLE);
@@ -344,25 +373,23 @@ int main(int argc, char *args[]) {
                     quit = 1;
                     break;
                 case SDL_KEYDOWN:
-                    if(scanCode == SDL_SCANCODE_ESCAPE) quit = 1;
                     if(scanCode == SDL_SCANCODE_F1) set_tileset(tilemap, 0);
                     if(scanCode == SDL_SCANCODE_F2) set_tileset(tilemap, 1);
                     if(scanCode == SDL_SCANCODE_F3) set_tileset(tilemap, 2);
-                    if(scanCode == SDL_SCANCODE_F4) set_tileset(tilemap, 3);
-                    if(scanCode == SDL_SCANCODE_0) remove_layer(tilemap, 0);
+
                     if(scanCode == SDL_SCANCODE_1) set_layer(tilemap, 0);
                     if(scanCode == SDL_SCANCODE_2) set_layer(tilemap, 1);
                     if(scanCode == SDL_SCANCODE_3) set_layer(tilemap, 2);
                     if(scanCode == SDL_SCANCODE_4) set_layer(tilemap, 3);
-                    if(scanCode == SDL_SCANCODE_5) set_layer(tilemap, 4);
-                    if(scanCode == SDL_SCANCODE_6) set_layer(tilemap, 5);
-                    if(scanCode == SDL_SCANCODE_7) set_layer(tilemap, 6);
-                    if(scanCode == SDL_SCANCODE_8) set_layer(tilemap, 7);
-                    if(scanCode == SDL_SCANCODE_9) change_layer_visibility(tilemap, 0);
+                    if(scanCode == SDL_SCANCODE_8) change_layer_visibility(tilemap, 0);
+                    if(scanCode == SDL_SCANCODE_9) remove_layer(tilemap, 0);
+                    if(scanCode == SDL_SCANCODE_0) clear_tilemap(tilemap);
+
                     if(scanCode == SDL_SCANCODE_B) cur_tool = Brush;
                     if(scanCode == SDL_SCANCODE_E) cur_tool = Erase;
                     if(scanCode == SDL_SCANCODE_F) cur_tool = Filter;
                     if(scanCode == SDL_SCANCODE_S) cur_tool = Select;
+
                     if ((event.key.keysym.mod & KMOD_CTRL)) {
                         if(scanCode == SDL_SCANCODE_S)
                             save_tilemap(tilemap, "../content/");
@@ -372,20 +399,26 @@ int main(int argc, char *args[]) {
                     break;
                 case SDL_MOUSEWHEEL:
                     cur_tileset = tilemap->cur_tileset;
-                    cur_tile = tilemap->tileset[cur_tileset].cur_tile;
-                    const int num_tiles = tilemap->tileset[cur_tileset].num_tiles;
+                    cur_tile = tilemap->tilesets[cur_tileset].cur_tile;
+                    const int num_tiles = tilemap->tilesets[cur_tileset].num_tiles;
                     cur_tile += event.wheel.y;
-                    tilemap->tileset[cur_tileset].cur_tile = cur_tile < 0 ? num_tiles - 1 : cur_tile % num_tiles;
+                    tilemap->tilesets[cur_tileset].cur_tile = cur_tile < 0 ? num_tiles - 1 : cur_tile % num_tiles;
                     break;
                 case SDL_MOUSEBUTTONDOWN:
                 case SDL_MOUSEMOTION:
                     if(event.button.button == SDL_BUTTON_LEFT){
                         switch(cur_tool){
                             case Brush:
-                                put_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                                if(tilemap->layers[tilemap->cur_layer].type == TILES)
+                                    put_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                                else if(tilemap->layers[tilemap->cur_layer].type == ENTITIES)
+                                    put_entity(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
                                 break;
                             case Erase:
-                                remove_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                                if(tilemap->layers[tilemap->cur_layer].type == TILES)
+                                    remove_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                                else if(tilemap->layers[tilemap->cur_layer].type == ENTITIES)
+                                    remove_entity(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
                                 break;
                             case Filter:
                                 filter_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
@@ -406,14 +439,24 @@ int main(int argc, char *args[]) {
 
         render_tilemap(renderer, tilemap);
 
+        tileset_t tileset_buffer = tilemap->tilesets[cur_tileset];
+        SDL_Rect des_buffer = (SDL_Rect) {
+                880,
+                32,
+                tilemap->tile_width,
+                tilemap->tile_height
+        };
+        SDL_Rect src_buffer = (SDL_Rect) {
+                tileset_buffer.tile[cur_tile].x,
+                tileset_buffer.tile[cur_tile].y,
+                tileset_buffer.tile_width,
+                tileset_buffer.tile_height
+        };
+        SDL_RenderCopy(renderer,tileset_buffer.image.texture, &src_buffer, &des_buffer);
+
         if((cursor.dst_rect.x < config.window.width && cursor.dst_rect.x > 0)
            && (cursor.dst_rect.y < config.window.height && cursor.dst_rect.y > 0))
-                SDL_RenderCopy(
-                        renderer,
-                        cursor.texture,
-                        &cursor.src_rect[cur_tool],
-                        &cursor.dst_rect
-                );
+                SDL_RenderCopy(renderer, cursor.texture, &cursor.src_rect[cur_tool], &cursor.dst_rect);
 
         SDL_RenderPresent(renderer);
 

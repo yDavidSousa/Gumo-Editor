@@ -3,20 +3,26 @@
 
 #include <SDL_image.h>
 
+#define DEFAULT_FILE_NAME_LEN 256
 #define EMPTY_TILE (-1)
 
-typedef struct tileinfo {
+typedef struct image_data {
+    char source [DEFAULT_FILE_NAME_LEN];
+    SDL_Texture *texture;
+    int width, height;
+} image_data_t;
+
+typedef struct tile_data {
     int id;
     int x, y;
-} tileinfo_t;
+} tile_data_t;
 
-typedef struct tileset{
-    char name[256];
-    char image_source[256];
-    SDL_Texture *image_texture;
+typedef struct tileset {
+    char name[DEFAULT_FILE_NAME_LEN];
+    image_data_t image;
+    tile_data_t *tile;
     int tile_width, tile_height;
     int num_tiles, cur_tile;
-    tileinfo_t *tileinfo;
 } tileset_t;
 
 #endif

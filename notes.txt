@@ -2,4 +2,28 @@
 /*
  * int index = (TILES_X * r) + c;
  * http://docs.mapeditor.org/en/stable/reference/tmx-map-format/
- * */
+ *
+ * Property = Name, Type, Value
+ *
+typedef enum property_type {
+    INT,
+    FLOAT,
+    STRING,
+    BOOL
+} property_type_t ;
+
+typedef union property_value {
+    char _string[256];
+    int _int;
+    float _float;
+    int _bool;
+} property_value_t ;
+
+typedef struct property {
+    char name[256];
+    property_type_t type;
+    property_value_t value;
+} property_t ;
+
+ *
+ */
