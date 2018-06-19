@@ -358,6 +358,11 @@ int main(int argc, char *args[]) {
     cursor.dst_rect.w = cursor.src_rect->w;
     cursor.dst_rect.h = cursor.src_rect->h;
 
+    tilemap->zoom = 16;
+    tilemap->offset_x = 100;
+    tilemap->offset_y = 100;
+    load_tilemap(tilemap, "../content/Tilemap_01.txt");
+
     while (!quit){
         //Time loop
         prev_time = cur_time;

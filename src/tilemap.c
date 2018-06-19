@@ -186,10 +186,10 @@ void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
                     const tileset_t tileset_buffer = tilemap->tilesets[tileset_index];
 
                     SDL_Rect des_buffer = (SDL_Rect) {
-                            c * tilemap->tile_width,
-                            r * tilemap->tile_height,
-                            tilemap->tile_width,
-                            tilemap->tile_height
+                            tilemap->offset_x + c * (tilemap->tile_width + tilemap->zoom),
+                            tilemap->offset_y + r * (tilemap->tile_height + tilemap->zoom),
+                            (tilemap->tile_width + tilemap->zoom),
+                            (tilemap->tile_height + tilemap->zoom)
                     };
 
                     SDL_Rect src_buffer = (SDL_Rect) {
@@ -244,9 +244,14 @@ void put_tile(tilemap_t *tilemap, const int x, const int y){
     const int cur_tileset = tilemap->cur_tileset;
     const int cur_tile = tilemap->tilesets[cur_tileset].cur_tile;
 
+    int position_x = (x - tilemap->offset_x);
+    int position_y = (y - tilemap->offset_y);
+
+    if(position_x < 0 || position_y < 0) return;
+
     const int l = tilemap->cur_layer;
-    const int c = (x / tilemap->tile_width);
-    const int r = (y / tilemap->tile_height);
+    int c = position_x / (tilemap->tile_width + tilemap->zoom);
+    int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
     tilemap->tileset_data[l][r][c] = cur_tileset;
     tilemap->tile_data[l][r][c] = cur_tile;
@@ -267,9 +272,14 @@ void remove_tile(tilemap_t *tilemap, const int x, const int y){
     if(tilemap->layers[tilemap->cur_layer].locked)
         return;
 
+    int position_x = (x - tilemap->offset_x);
+    int position_y = (y - tilemap->offset_y);
+
+    if(position_x < 0 || position_y < 0) return;
+
     const int l = tilemap->cur_layer;
-    const int c = (x / tilemap->tile_width);
-    const int r = (y / tilemap->tile_height);
+    int c = position_x / (tilemap->tile_width + tilemap->zoom);
+    int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
     tilemap->tileset_data[l][r][c] = EMPTY_TILE;
     tilemap->tile_data[l][r][c] = EMPTY_TILE;
@@ -287,9 +297,14 @@ void filter_tile(tilemap_t *tilemap, const int x, const int y){
         return;
     }
 
+    int position_x = (x - tilemap->offset_x);
+    int position_y = (y - tilemap->offset_y);
+
+    if(position_x < 0 || position_y < 0) return;
+
     const int l = tilemap->cur_layer;
-    const int c = (x / tilemap->tile_width);
-    const int r = (y / tilemap->tile_height);
+    int c = position_x / (tilemap->tile_width + tilemap->zoom);
+    int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
     tilemap->cur_tileset = tilemap->tileset_data[l][r][c];
     tilemap->tilesets[tilemap->cur_tileset].cur_tile = tilemap->tile_data[l][r][c];

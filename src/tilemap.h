@@ -23,6 +23,7 @@ typedef struct tilemap {
     int map_width, map_height;
     int tile_width, tile_height;
     int cur_layer, cur_tileset, cur_entity;
+    int zoom, offset_x, offset_y;
 } tilemap_t;
 
 //TILESET FUNCTIONS
