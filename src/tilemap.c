@@ -15,55 +15,6 @@ void set_tileset(tilemap_t *tilemap, const int tileset){
     tilemap->cur_tileset = tileset;
 }
 
-void add_tileset(tilemap_t *tilemap, const char *name, const char *image_source, const int tile_width, const int tile_height){
-
-    if(tilemap->num_tilesets == MAX_TILESETS){
-        printf("Maximum allowed number of tilesets exceeded!\n");
-        return;
-    }
-
-    const int index = tilemap->num_tilesets;
-    strcpy(tilemap->tilesets[index].name, name);
-    strcpy(tilemap->tilesets[index].image.source, image_source);
-    tilemap->tilesets[index].tile_width = tile_width;
-    tilemap->tilesets[index].tile_height = tile_height;
-    tilemap->tilesets[index].cur_tile = 0;
-    tilemap->cur_tileset = index;
-    tilemap->num_tilesets++;
-}
-
-void load_tileset(SDL_Renderer *renderer, tileset_t *tileset){
-    tileset->image.texture = load_texture(renderer, tileset->image.source);
-    SDL_QueryTexture(tileset->image.texture, NULL, NULL, &tileset->image.width, &tileset->image.height);
-
-    const int column = tileset->image.width / tileset->tile_width;
-    const int row = tileset->image.height / tileset->tile_height;
-
-    tileset->num_tiles = column * row;
-    tileset->tile = malloc(tileset->num_tiles * sizeof(tile_data_t));
-
-    SDL_Rect *tiles = split_image(tileset->image.texture, column, row);
-
-    for (int i = 0; i < tileset->num_tiles; ++i) {
-        tileset->tile[i].id = i;
-        tileset->tile[i].x = tiles[i].x;
-        tileset->tile[i].y = tiles[i].y;
-    }
-
-    free(tiles);
-}
-
-//TODO(David): Show warning if use any tile in this tilesets and don't render;
-//TODO(David): Think some solution for the rest of the tiles
-void remove_tileset(tileset_t *tileset){
-    tileset->num_tiles = 0;
-    tileset->cur_tile = 0;
-    tileset->tile_width = 0;
-    tileset->tile_height = 0;
-    free(tileset->tile);
-    SDL_DestroyTexture(tileset->image.texture);
-}
-
 //LAYER FUNCTIONS
 
 void add_layer(tilemap_t *tilemap, const char *name, const layer_type_t type){
@@ -177,29 +128,17 @@ void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
                 }
 
                 if(tilemap->layers[l].type == TILES){
-                    tileset_index = tilemap->tileset_data[l][r][c];
-                    tile_index = tilemap->tile_data[l][r][c];
-
-                    if (tileset_index == EMPTY_TILE || tile_index == EMPTY_TILE)
+                    if (tilemap->tile_data[l][r][c] == EMPTY_TILE)
                         continue;
 
-                    const tileset_t tileset_buffer = tilemap->tilesets[tileset_index];
-
-                    SDL_Rect des_buffer = (SDL_Rect) {
+                    const SDL_Rect des_buffer = (SDL_Rect) {
                             tilemap->offset_x + c * (tilemap->tile_width + tilemap->zoom),
                             tilemap->offset_y + r * (tilemap->tile_height + tilemap->zoom),
                             (tilemap->tile_width + tilemap->zoom),
                             (tilemap->tile_height + tilemap->zoom)
                     };
 
-                    SDL_Rect src_buffer = (SDL_Rect) {
-                            tileset_buffer.tile[tile_index].x,
-                            tileset_buffer.tile[tile_index].y,
-                            tileset_buffer.tile_width,
-                            tileset_buffer.tile_height
-                    };
-
-                    SDL_RenderCopy(renderer, tileset_buffer.image.texture, &src_buffer, &des_buffer);
+                    render_tile(renderer, tilemap->tile_data[l][r][c], &des_buffer);
                 }
             }
         }
@@ -218,9 +157,7 @@ void clear_tilemap(tilemap_t *tilemap){
 }
 
 void remove_tilemap(tilemap_t *tilemap){
-    for (int i = 0; i < tilemap->num_tilesets; ++i)
-        remove_tileset(&tilemap->tilesets[i]);
-
+    destroy_tilesets();
     free(tilemap);
 }
 
@@ -233,28 +170,22 @@ void put_tile(tilemap_t *tilemap, const int x, const int y){
         return;
     }
 
-    if(tilemap->num_tilesets == 0){
-        printf("Does not contain any tilesets!\n");
-        return;
-    }
+    //TODO(David): Check here if there's some tileset in current tilemap
 
     if(tilemap->layers[tilemap->cur_layer].locked)
         return;
 
-    const int cur_tileset = tilemap->cur_tileset;
-    const int cur_tile = tilemap->tilesets[cur_tileset].cur_tile;
-
     int position_x = (x - tilemap->offset_x);
     int position_y = (y - tilemap->offset_y);
 
-    if(position_x < 0 || position_y < 0) return;
+    if(position_x < 0 || position_y < 0)
+        return;
 
     const int l = tilemap->cur_layer;
     int c = position_x / (tilemap->tile_width + tilemap->zoom);
     int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
-    tilemap->tileset_data[l][r][c] = cur_tileset;
-    tilemap->tile_data[l][r][c] = cur_tile;
+    get_selected_tile(tilemap->cur_tileset, &tilemap->tile_data[l][r][c]);
 }
 
 void remove_tile(tilemap_t *tilemap, const int x, const int y){

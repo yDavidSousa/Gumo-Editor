@@ -30,12 +30,6 @@ typedef struct tilemap {
 
 void set_tileset(tilemap_t *tilemap, int tileset);
 
-void add_tileset(tilemap_t *tilemap, const char *name, const char *image_source, int tile_width, int tile_height);
-
-void load_tileset(SDL_Renderer *renderer, tileset_t *tileset);
-
-void remove_tileset(tileset_t *tileset);
-
 //LAYER FUNCTIONS
 
 void add_layer(tilemap_t *tilemap, const char *name, layer_type_t type);

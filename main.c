@@ -340,12 +340,9 @@ int main(int argc, char *args[]) {
     add_layer(tilemap, "Layer_4", ENTITIES);
 
     //Add and remove tilesets
-    add_tileset(tilemap, "Tileset_8x8", "content/tileset_8x8.png", 8, 8);
-    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
-    add_tileset(tilemap, "Tileset_16x16", "content/tileset_16x16.png", 16, 16);
-    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
-    add_tileset(tilemap, "Tileset_32x32", "content/tileset_32x32.png", 32, 32);
-    load_tileset(renderer, &tilemap->tilesets[tilemap->cur_tileset]);
+    add_tileset(renderer, "Tileset_8x8", "content/tileset_8x8.png", 8, 8);
+    add_tileset(renderer, "Tileset_16x16", "content/tileset_16x16.png", 16, 16);
+    add_tileset(renderer, "Tileset_32x32", "content/tileset_32x32.png", 32, 32);
 
     //Add and remove Entities
     add_entity(tilemap, "Player");
@@ -358,10 +355,11 @@ int main(int argc, char *args[]) {
     cursor.dst_rect.w = cursor.src_rect->w;
     cursor.dst_rect.h = cursor.src_rect->h;
 
-    tilemap->zoom = 16;
-    tilemap->offset_x = 100;
-    tilemap->offset_y = 100;
-    load_tilemap(tilemap, "../content/Tilemap_01.txt");
+    tilemap->zoom = 0;
+    tilemap->offset_x = 0;
+    tilemap->offset_y = 0;
+    tilemap->cur_tileset = 2;
+    //load_tilemap(tilemap, "../content/Tilemap_01.txt");
 
     while (!quit){
         //Time loop
@@ -443,21 +441,6 @@ int main(int argc, char *args[]) {
         SDL_RenderClear(renderer);
 
         render_tilemap(renderer, tilemap);
-
-        tileset_t tileset_buffer = tilemap->tilesets[cur_tileset];
-        SDL_Rect des_buffer = (SDL_Rect) {
-                880,
-                32,
-                tilemap->tile_width,
-                tilemap->tile_height
-        };
-        SDL_Rect src_buffer = (SDL_Rect) {
-                tileset_buffer.tile[cur_tile].x,
-                tileset_buffer.tile[cur_tile].y,
-                tileset_buffer.tile_width,
-                tileset_buffer.tile_height
-        };
-        SDL_RenderCopy(renderer,tileset_buffer.image.texture, &src_buffer, &des_buffer);
 
         if((cursor.dst_rect.x < config.window.width && cursor.dst_rect.x > 0)
            && (cursor.dst_rect.y < config.window.height && cursor.dst_rect.y > 0))
