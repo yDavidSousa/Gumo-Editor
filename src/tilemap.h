@@ -7,21 +7,18 @@
 
 #define MAX_COLUMNS 200
 #define MAX_ROWS 200
-#define MAX_LAYERS 4
-#define MAX_TILESETS 4
 #define MAX_ENTITIES 20
 
 typedef struct tilemap {
     char name[256];
-    int tile_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
-    int tileset_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
-    int entity_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
+    short data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
+    short entity_data[MAX_LAYERS][MAX_ROWS][MAX_COLUMNS];
     layer_data_t layers[MAX_LAYERS];
-    tileset_t tilesets[MAX_TILESETS];
     entity_data_t entities[MAX_ENTITIES];
-    int num_columns, num_rows, num_layers, num_tilesets, num_entities;
     int map_width, map_height;
     int tile_width, tile_height;
+    int tiles_per_width, tiles_per_height;
+    int num_layers, num_entities;
     int cur_layer, cur_tileset, cur_entity;
     int zoom, offset_x, offset_y;
 } tilemap_t;
@@ -37,8 +34,6 @@ void add_layer(tilemap_t *tilemap, const char *name, layer_type_t type);
 void remove_layer(tilemap_t *tilemap, int index);
 
 void set_layer(tilemap_t *tilemap, int layer);
-
-void change_layer_visibility(tilemap_t *tilemap, int layer);
 
 //TILEMAP FUNCTIONS
 

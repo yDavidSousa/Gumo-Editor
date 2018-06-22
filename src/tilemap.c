@@ -7,11 +7,6 @@
 //TILESET FUNCTIONS
 
 void set_tileset(tilemap_t *tilemap, const int tileset){
-    if(tileset >= tilemap->num_tilesets){
-        printf("There's no such tilesets!\n");
-        return;
-    }
-
     tilemap->cur_tileset = tileset;
 }
 
@@ -29,13 +24,11 @@ void add_layer(tilemap_t *tilemap, const char *name, const layer_type_t type){
     tilemap->layers[index].index = index;
     strcpy(tilemap->layers[index].name, name);
     tilemap->layers[index].type = type;
-    tilemap->layers[index].locked = 0;
-    tilemap->layers[index].hidden = 0;
+    tilemap->layers[index].flags = 0;
 
-    for (int r = 0; r < tilemap->num_rows; ++r)
-        for (int c = 0; c < tilemap->num_columns; ++c){
-            tilemap->tile_data[index][r][c] = EMPTY_TILE;
-            tilemap->tileset_data[index][r][c] = EMPTY_TILE;
+    for (int r = 0; r < tilemap->tiles_per_height; ++r)
+        for (int c = 0; c < tilemap->tiles_per_width; ++c){
+            tilemap->data[index][r][c] = EMPTY_TILE;
             tilemap->entity_data[index][r][c] = EMPTY_TILE;
         }
 
@@ -52,10 +45,9 @@ void remove_layer(tilemap_t *tilemap, const int index){
     for (int i = index; i < tilemap->num_layers - 1; ++i) {
         tilemap->layers[i] = tilemap->layers[i+1];
 
-        for (int r = 0; r < tilemap->num_rows; ++r)
-            for (int c = 0; c < tilemap->num_columns; ++c){
-                tilemap->tileset_data[i][r][c] = tilemap->tileset_data[i+1][r][c];
-                tilemap->tile_data[i][r][c] = tilemap->tile_data[i+1][r][c];
+        for (int r = 0; r < tilemap->tiles_per_height; ++r)
+            for (int c = 0; c < tilemap->tiles_per_width; ++c){
+                tilemap->data[i][r][c] = tilemap->data[i+1][r][c];
             }
     }
 
@@ -71,10 +63,6 @@ void set_layer(tilemap_t *tilemap, const int layer){
     tilemap->cur_layer = layer;
 }
 
-void change_layer_visibility(tilemap_t *tilemap, const int layer){
-    tilemap->layers[layer].hidden = tilemap->layers[layer].hidden == 1 ? 0 : 1;
-}
-
 //TILEMAP FUNCTIONS
 
 tilemap_t *create_tilemap(const char *name, const int width, const int height, const int tile_width, const int tile_height){
@@ -85,10 +73,9 @@ tilemap_t *create_tilemap(const char *name, const int width, const int height, c
     tilemap->map_height = height;
     tilemap->tile_width = tile_width;
     tilemap->tile_height = tile_height;
-    tilemap->num_columns = width / tile_width;
-    tilemap->num_rows = height / tile_height;
+    tilemap->tiles_per_width = width / tile_width;
+    tilemap->tiles_per_height = height / tile_height;
     tilemap->num_layers = 0;
-    tilemap->num_tilesets = 0;
     tilemap->num_entities = 0;
     tilemap->cur_layer = 0;
     tilemap->cur_tileset = 0;
@@ -99,14 +86,12 @@ tilemap_t *create_tilemap(const char *name, const int width, const int height, c
 
 //TODO(David): Better this function
 void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
-    int tileset_index, tile_index;
-
     for (int l = 0; l < tilemap->num_layers; ++l) {
-        if(tilemap->layers[l].hidden)
+        if(layer_has_flags(&tilemap->layers[l], LAYER_HIDDEN))
             continue;
 
-        for (int r = 0; r < tilemap->num_rows; ++r) {
-            for (int c = 0; c < tilemap->num_columns; ++c) {
+        for (int r = 0; r < tilemap->tiles_per_height; ++r) {
+            for (int c = 0; c < tilemap->tiles_per_width; ++c) {
 
                 if(tilemap->layers[l].type == ENTITIES){
 
@@ -128,7 +113,7 @@ void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
                 }
 
                 if(tilemap->layers[l].type == TILES){
-                    if (tilemap->tile_data[l][r][c] == EMPTY_TILE)
+                    if (tilemap->data[l][r][c] == EMPTY_TILE)
                         continue;
 
                     const SDL_Rect des_buffer = (SDL_Rect) {
@@ -138,7 +123,7 @@ void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
                             (tilemap->tile_height + tilemap->zoom)
                     };
 
-                    render_tile(renderer, tilemap->tile_data[l][r][c], &des_buffer);
+                    render_tile(renderer, tilemap->data[l][r][c], &des_buffer);
                 }
             }
         }
@@ -146,14 +131,10 @@ void render_tilemap(SDL_Renderer *renderer, const tilemap_t *tilemap){
 }
 
 void clear_tilemap(tilemap_t *tilemap){
-    for (int l = 0; l < tilemap->num_layers; ++l) {
-        for (int r = 0; r < tilemap->num_rows * tilemap->num_columns; ++r) {
-            for (int c = 0; c < tilemap->num_columns; ++c) {
-                tilemap->tile_data[l][r][c] = EMPTY_TILE;
-                tilemap->tileset_data[l][r][c] = EMPTY_TILE;
-            }
-        }
-    }
+    for (int l = 0; l < tilemap->num_layers; ++l)
+        for (int r = 0; r < tilemap->tiles_per_height; ++r)
+            for (int c = 0; c < tilemap->tiles_per_width; ++c)
+                tilemap->data[l][r][c] = EMPTY_TILE;
 }
 
 void remove_tilemap(tilemap_t *tilemap){
@@ -170,10 +151,44 @@ void put_tile(tilemap_t *tilemap, const int x, const int y){
         return;
     }
 
-    //TODO(David): Check here if there's some tileset in current tilemap
-
-    if(tilemap->layers[tilemap->cur_layer].locked)
+    if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_LOCKED)){
+        printf("Current layer locked!\n");
         return;
+    }
+
+    if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_HIDDEN)){
+        printf("Current layer hidden!\n");
+        return;
+    }
+
+    int position_x = (x - tilemap->offset_x);
+    int position_y = (y - tilemap->offset_y);
+
+    if(position_x < 0 || position_y < 0)
+        return;
+
+    const int l = tilemap->cur_layer;
+    int c = position_x / (tilemap->tile_width + tilemap->zoom);
+    int r = position_y / (tilemap->tile_height + tilemap->zoom);
+    get_selected_tile(tilemap->cur_tileset, &tilemap->data[l][r][c]);
+}
+
+void remove_tile(tilemap_t *tilemap, const int x, const int y){
+
+    if(tilemap->num_layers == 0){
+        printf("Does not contain any layer!\n");
+        return;
+    }
+
+    if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_LOCKED)){
+        printf("Current layer locked!\n");
+        return;
+    }
+
+    if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_HIDDEN)){
+        printf("Current layer hidden!\n");
+        return;
+    }
 
     int position_x = (x - tilemap->offset_x);
     int position_y = (y - tilemap->offset_y);
@@ -185,46 +200,25 @@ void put_tile(tilemap_t *tilemap, const int x, const int y){
     int c = position_x / (tilemap->tile_width + tilemap->zoom);
     int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
-    get_selected_tile(tilemap->cur_tileset, &tilemap->tile_data[l][r][c]);
-}
-
-void remove_tile(tilemap_t *tilemap, const int x, const int y){
-
-    if(tilemap->num_tilesets == 0){
-        printf("Does not contain any tilesets!\n");
-        return;
-    }
-
-    if(tilemap->num_layers == 0){
-        printf("Does not contain any layer!\n");
-        return;
-    }
-
-    if(tilemap->layers[tilemap->cur_layer].locked)
-        return;
-
-    int position_x = (x - tilemap->offset_x);
-    int position_y = (y - tilemap->offset_y);
-
-    if(position_x < 0 || position_y < 0) return;
-
-    const int l = tilemap->cur_layer;
-    int c = position_x / (tilemap->tile_width + tilemap->zoom);
-    int r = position_y / (tilemap->tile_height + tilemap->zoom);
-
-    tilemap->tileset_data[l][r][c] = EMPTY_TILE;
-    tilemap->tile_data[l][r][c] = EMPTY_TILE;
+    tilemap->data[l][r][c] = EMPTY_TILE;
 }
 
 void filter_tile(tilemap_t *tilemap, const int x, const int y){
 
-    if(tilemap->num_tilesets == 0){
-        printf("Does not contain any tilesets!\n");
+    if(tilemap->num_layers == 0){
+        printf("Does not contain any layer!\n");
         return;
     }
 
-    if(tilemap->num_layers == 0){
-        printf("Does not contain any layer!\n");
+    const int l = tilemap->cur_layer;
+
+    if(layer_has_flags(&tilemap->layers[l], LAYER_LOCKED)){
+        printf("Current layer locked!\n");
+        return;
+    }
+
+    if(layer_has_flags(&tilemap->layers[l], LAYER_HIDDEN)){
+        printf("Current layer hidden!\n");
         return;
     }
 
@@ -233,12 +227,10 @@ void filter_tile(tilemap_t *tilemap, const int x, const int y){
 
     if(position_x < 0 || position_y < 0) return;
 
-    const int l = tilemap->cur_layer;
     int c = position_x / (tilemap->tile_width + tilemap->zoom);
     int r = position_y / (tilemap->tile_height + tilemap->zoom);
 
-    tilemap->cur_tileset = tilemap->tileset_data[l][r][c];
-    tilemap->tilesets[tilemap->cur_tileset].cur_tile = tilemap->tile_data[l][r][c];
+    tilemap->cur_tileset = filter_tileset(tilemap->data[l][r][c]);
 }
 
 //ENTITY FUNCTIONS
@@ -308,8 +300,8 @@ void delete_entity(tilemap_t *tilemap, const int id){
     for (int i = id; i < tilemap->num_entities - 1; ++i) {
         tilemap->entities[i] = tilemap->entities[i+1];
 
-        for (int r = 0; r < tilemap->num_rows; ++r)
-            for (int c = 0; c < tilemap->num_columns; ++c)
+        for (int r = 0; r < tilemap->tiles_per_height; ++r)
+            for (int c = 0; c < tilemap->tiles_per_width; ++c)
                 tilemap->entity_data[i][r][c] = tilemap->entity_data[i+1][r][c];
     }
 

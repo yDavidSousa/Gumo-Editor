@@ -16,7 +16,7 @@ set(deps_lib_dir "${CMAKE_SOURCE_DIR}/deps/lib/${plataform}")
 set(libs "-lmingw32 -lSDL2main -lSDL2 -lSDL2_image -lSDL2_ttf -lSDL2_mixer")
 
 include_directories("src;${deps_include_dir}")
-set(SOURCE_FILES src/utils.h src/layer.h src/tileset.h src/tileset.c src/entity.h src/tilemap.h src/utils.c src/tilemap.c main.c)
+set(SOURCE_FILES src/utils.h src/layer.h src/layer.c src/tileset.h src/tileset.c src/entity.h src/tilemap.h src/utils.c src/tilemap.c main.c)
 add_executable(Gumo_Editor ${SOURCE_FILES} resource.rc)
 target_link_libraries(Gumo_Editor ${libs})
 
