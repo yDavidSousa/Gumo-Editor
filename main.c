@@ -3,12 +3,14 @@
 #include <mem.h>
 
 #include <SDL.h>
-#include <SDL_image.h>
 
 #include <utils.h>
 #include <tilemap.h>
+#include "gumo_serializer.h"
 
 const int FPS = 60;
+const int MAX_ZOOM = 8;
+const int MIN_ZOOM = -8;
 
 typedef struct window {
     char title[256];
@@ -24,166 +26,34 @@ typedef struct config {
     window_t window;
 } config_t;
 
-typedef enum tools{
-    Brush = 0,
-    Erase = 1,
-    Filter = 2,
-    Select = 3,
-} tools_t;
+typedef enum tools {
+    TOOL_BRUSH,
+    TOOL_ERASER,
+    TOOL_FILTER,
+    TOOL_SELECT,
+} tool_t;
 
 typedef struct cursor_ui {
     SDL_Texture *texture;
     SDL_Rect *src_rect;
     SDL_Rect dst_rect;
+    int down_x, down_y;
 } cursor_ui_t;
 
 config_t config;
 cursor_ui_t cursor;
 
+void set_window_name(SDL_Window *window, const char *file_name, const char *app_name){
+    char window_name[256];
+    strcpy(window_name, file_name);
+    strcat(window_name, " - ");
+    strcat(window_name, app_name);
+    SDL_SetWindowTitle(window, window_name);
+}
+
 void free_cursor(cursor_ui_t cursor){
     SDL_DestroyTexture(cursor.texture);
     free(cursor.src_rect);
-}
-
-void save_tilemap(tilemap_t *tilemap, const char *path){
-    char file_name[80];
-    strcpy(file_name, path);
-    strcat(file_name, tilemap->name);
-    strcat(file_name, ".txt");
-
-    FILE *file = fopen(file_name, "w");
-
-    if(!file){
-        printf("Couldn't open file\n");
-        return;
-    }
-
-    fprintf(file, "#TILEMAP_INFO\n");
-    fprintf(file,"\t%d //number of layers\n", tilemap->num_layers);
-    fprintf(file,"\t%d //number of columns\n", tilemap->tiles_per_width);
-    fprintf(file,"\t%d //number of rows\n", tilemap->tiles_per_height);
-    fprintf(file,"\t%d //map_width\n", tilemap->map_width);
-    fprintf(file,"\t%d //map_height\n", tilemap->map_height);
-    fprintf(file,"\t%d //tile_width\n", tilemap->tile_width);
-    fprintf(file,"\t%d //tile_height\n", tilemap->tile_height);
-    fprintf(file, "\n");
-
-    fprintf(file, "#LAYERS_INFO\n");
-
-    char layer_type_buffer[80];
-    for (int i = 0; i < tilemap->num_layers; ++i){
-
-        switch (tilemap->layers[i].type){
-            case TILES:
-                strcpy(layer_type_buffer, TILES_LAYER_TYPE);
-                break;
-            case ENTITIES:
-                strcpy(layer_type_buffer, ENTITIES_LAYER_TYPE);
-                break;
-        }
-
-        fprintf(file, "\t%s %d %s\n",
-                tilemap->layers[i].name,
-                tilemap->layers[i].index,
-                layer_type_buffer
-        );
-    }
-
-    fprintf(file, "\n");
-
-    fprintf(file, "#TILESETS_INFO\n");
-    fprintf(file, "\n");
-
-    for (int l = 0; l < tilemap->num_layers; ++l) {
-        fprintf(file, "%s\n", tilemap->layers[l].name);
-
-        if(tilemap->layers[l].type == TILES){
-            for (int r = 0; r < tilemap->tiles_per_height; ++r) {
-                fputs("\t", file);
-                for (int c = 0; c < tilemap->tiles_per_width; ++c)
-                    fprintf(file, "%d ",
-                            tilemap->data[l][r][c]
-                    );
-                fputs("\n", file);
-            }
-        }
-
-        if(tilemap->layers[l].type == ENTITIES){
-            for (int r = 0; r < tilemap->tiles_per_height; ++r) {
-                for (int c = 0; c < tilemap->tiles_per_width; ++c){
-                    if(tilemap->entity_data[l][r][c] != EMPTY_TILE){
-                        int index =  tilemap->entity_data[l][r][c];
-                        fprintf(file, "\t%d %s %d %d %d %d\n",
-                                tilemap->entities[index].id,
-                                tilemap->entities[index].name,
-                                c * tilemap->tile_width,
-                                r * tilemap->tile_height,
-                                tilemap->entities[index].w,
-                                tilemap->entities[index].h
-                        );
-                    }
-                }
-            }
-        }
-
-        fputs("\n", file);
-    }
-
-    printf("File saved with successful!\n");
-    fclose(file);
-}
-
-void load_tilemap(tilemap_t *tilemap, const char *file_path) {
-    FILE *file = fopen(file_path, "r");
-
-    if (!file){
-        printf("Couldn't open file\n");
-        return;
-    }
-
-    char buffer[256] = {};
-    while(!feof(file)){
-        fscanf(file, "%s", buffer);
-
-        if(strcmp(buffer, "#TILEMAP_INFO") == 0){
-            fscanf(file, "%d %*[^\n]", &tilemap->num_layers);
-            fscanf(file, "%d %*[^\n]", &tilemap->tiles_per_width);
-            fscanf(file, "%d %*[^\n]", &tilemap->tiles_per_height);
-            fscanf(file, "%d %*[^\n]", &tilemap->map_width);
-            fscanf(file, "%d %*[^\n]", &tilemap->map_height);
-            fscanf(file, "%d %*[^\n]", &tilemap->tile_width);
-            fscanf(file, "%d %*[^\n]", &tilemap->tile_height);
-        } else if(strcmp(buffer, "#LAYERS_INFO") == 0){
-            char layer_type_buffer[80];
-            for (int i = 0; i < tilemap->num_layers; ++i) {
-                fscanf(file, "%s %d %s",
-                   tilemap->layers[i].name,
-                   &tilemap->layers[i].index,
-                   layer_type_buffer
-                );
-
-                if(strcmp(layer_type_buffer, TILES_LAYER_TYPE) == 0)
-                    tilemap->layers[i].type = TILES;
-                else if (strcmp(layer_type_buffer, ENTITIES_LAYER_TYPE) == 0)
-                    tilemap->layers[i].type = ENTITIES;
-            }
-        } else if(strcmp(buffer, "#TILESETS_INFO") == 0){
-        } else {
-            for (int i = 0; i < tilemap->num_layers; ++i) {
-                if(strcmp(buffer, tilemap->layers[i].name) == 0){
-                    for (int r = 0; r < tilemap->tiles_per_height; ++r)
-                        for (int c = 0; c < tilemap->tiles_per_width; ++c)
-                            fscanf(file, "%d ",
-                                   &tilemap->data[i][r][c]
-                            );
-                    break;
-                }
-            }
-        }
-    }
-
-    printf("Tilemap loaded with successful!\n");
-    fclose(file);
 }
 
 void init_default_config(config_t *config){
@@ -234,6 +104,13 @@ void read_config_file(config_t *config, const char *path){
             }
             continue;
         }
+        if(strcmp(buffer, "maximized") == 0){
+            fscanf(file, "%s", buffer);
+
+            if(strcmp(buffer, "true") == 0){
+                config->window.flags |= SDL_WINDOW_MAXIMIZED;
+            }
+        }
         if(strcmp(buffer, "resizable") == 0){
             fscanf(file, "%s", buffer);
 
@@ -271,6 +148,32 @@ void read_config_file(config_t *config, const char *path){
     fclose(file);
 }
 
+void editor_action(tilemap_t *tilemap, const tool_t tool){
+    const int position_x = (cursor.dst_rect.x - tilemap->offset_x);
+    const int position_y = (cursor.dst_rect.y - tilemap->offset_y);
+
+    if(position_x < 0 || position_y < 0)
+        return;
+
+    const int column = position_x / (tilemap->tile_width + tilemap->zoom);
+    const int row = position_y / (tilemap->tile_height + tilemap->zoom);
+
+    switch(tool){
+        case TOOL_BRUSH:
+            put_tile(tilemap, tilemap->cur_layer, row, column);
+            break;
+        case TOOL_ERASER:
+            remove_tile(tilemap, tilemap->cur_layer, row, column);
+            break;
+        case TOOL_FILTER:
+            filter_tile(tilemap, tilemap->cur_layer, row, column);
+            break;
+        case TOOL_SELECT:
+            printf("SELECT\n");
+            break;
+    }
+}
+
 int main(int argc, char *args[]) {
     SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;
@@ -295,24 +198,24 @@ int main(int argc, char *args[]) {
     Uint32 renderer_flags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
     renderer = SDL_CreateRenderer(window, -1, renderer_flags);
 
+    SDL_GetWindowSize(window, &config.window.width, &config.window.height);
+
+    SDL_Event event;
     int prev_time = 0;
     int cur_time = 0;
     int quit = 0;
 
-    tools_t cur_tool = Brush;
+    tool_t cur_tool = TOOL_BRUSH;
     tilemap_t *tilemap = create_tilemap("Tilemap_01", 960, 544, 32, 32);
-
-    //Change window title with tilemap name
-    char window_name[256];
-    strcpy(window_name, tilemap->name);
-    strcat(window_name, " - ");
-    strcat(window_name, config.window.title);
-    SDL_SetWindowTitle(window, window_name);
+    set_window_name(window, tilemap->name, config.window.title); //Change window title with tilemap name
+    tilemap->offset_x = (config.window.width - tilemap->map_width) / 2;
+    tilemap->offset_y = (config.window.height - tilemap->map_height) / 2;
+    tilemap->zoom = 0;
 
     //Add and remove layer_data
     add_layer(tilemap, "Layer_1", TILES);
     add_layer(tilemap, "Layer_2", TILES);
-    add_layer(tilemap, "Layer_3", ENTITIES);
+    add_layer(tilemap, "Layer_3", TILES);
     add_layer(tilemap, "Layer_4", ENTITIES);
 
     //Add and remove tilesets
@@ -321,8 +224,9 @@ int main(int argc, char *args[]) {
     add_tileset(renderer, "Tileset_32x32", "content/tileset_32x32.png", 32, 32);
 
     //Add and remove Entities
-    add_entity(tilemap, "Player");
-    add_entity(tilemap, "Enemy");
+    add_entity("Player", 1192);
+    add_entity("Enemy", 1219);
+    add_entity("Checkpoint", -1);
 
     //Cursor
     SDL_ShowCursor(SDL_DISABLE);
@@ -331,12 +235,6 @@ int main(int argc, char *args[]) {
     cursor.dst_rect.w = cursor.src_rect->w;
     cursor.dst_rect.h = cursor.src_rect->h;
 
-    tilemap->zoom = 0;
-    tilemap->offset_x = 0;
-    tilemap->offset_y = 0;
-    tilemap->cur_tileset = 2;
-    //load_tilemap(tilemap, "../content/Tilemap_01.txt");
-
     while (!quit){
         //Time loop
         prev_time = cur_time;
@@ -344,78 +242,124 @@ int main(int argc, char *args[]) {
 
         SDL_GetMouseState(&cursor.dst_rect.x, &cursor.dst_rect.y);
 
-        SDL_Event event;
         while (SDL_PollEvent(&event) != 0){
-            SDL_Scancode scanCode = event.key.keysym.scancode;
             switch(event.type) {
                 case SDL_QUIT:
                     quit = 1;
                     break;
                 case SDL_KEYDOWN:
-                    if(scanCode == SDL_SCANCODE_F1) set_tileset(tilemap, 0);
-                    if(scanCode == SDL_SCANCODE_F2) set_tileset(tilemap, 1);
-                    if(scanCode == SDL_SCANCODE_F3) set_tileset(tilemap, 2);
-
-                    if(scanCode == SDL_SCANCODE_1) set_layer(tilemap, 0);
-                    if(scanCode == SDL_SCANCODE_2) set_layer(tilemap, 1);
-                    if(scanCode == SDL_SCANCODE_3) set_layer(tilemap, 2);
-                    if(scanCode == SDL_SCANCODE_4) set_layer(tilemap, 3);
-                    if(scanCode == SDL_SCANCODE_9) remove_layer(tilemap, 0);
-                    if(scanCode == SDL_SCANCODE_0) clear_tilemap(tilemap);
-
-                    if(scanCode == SDL_SCANCODE_B) cur_tool = Brush;
-                    if(scanCode == SDL_SCANCODE_E) cur_tool = Erase;
-                    if(scanCode == SDL_SCANCODE_F) cur_tool = Filter;
-                    if(scanCode == SDL_SCANCODE_S) cur_tool = Select;
-
-                    if ((event.key.keysym.mod & KMOD_CTRL)) {
-                        if(scanCode == SDL_SCANCODE_S)
-                            save_tilemap(tilemap, "../content/");
-                        if(scanCode == SDL_SCANCODE_O)
-                            load_tilemap(tilemap, "../content/Tilemap_01.txt");
-                    }
-                    break;
-                case SDL_MOUSEWHEEL:
-                    break;
-                case SDL_MOUSEBUTTONDOWN:
-                case SDL_MOUSEMOTION:
-                    if(event.button.button == SDL_BUTTON_LEFT){
-                        switch(cur_tool){
-                            case Brush:
-                                if(tilemap->layers[tilemap->cur_layer].type == TILES)
-                                    put_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
-                                else if(tilemap->layers[tilemap->cur_layer].type == ENTITIES)
-                                    put_entity(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                    if (event.key.keysym.mod & KMOD_CTRL) {
+                        switch (event.key.keysym.scancode) {
+                            case SDL_SCANCODE_S: save_gtm_file("../content/Tilemap_01.txt", tilemap); break;
+                            case SDL_SCANCODE_O: /*load_tilemap(tilemap, "../content/Tilemap_01.txt.txt");*/ break;
+                        }
+                    } else if(event.key.keysym.mod & KMOD_SHIFT) {
+                        switch (event.key.keysym.scancode) {
+                            case SDL_SCANCODE_R: remove_layer(tilemap, tilemap->cur_layer); break;
+                            case SDL_SCANCODE_C: clear_layer(tilemap, tilemap->cur_layer); break;
+                            case SDL_SCANCODE_H:
+                                if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_HIDDEN))
+                                    tilemap->layers[tilemap->cur_layer].flags &= ~LAYER_HIDDEN;
+                                else
+                                    tilemap->layers[tilemap->cur_layer].flags |= LAYER_HIDDEN;
                                 break;
-                            case Erase:
-                                if(tilemap->layers[tilemap->cur_layer].type == TILES)
-                                    remove_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
-                                else if(tilemap->layers[tilemap->cur_layer].type == ENTITIES)
-                                    remove_entity(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                            case SDL_SCANCODE_L:
+                                if(layer_has_flags(&tilemap->layers[tilemap->cur_layer], LAYER_LOCKED))
+                                    tilemap->layers[tilemap->cur_layer].flags &= ~LAYER_LOCKED;
+                                else
+                                    tilemap->layers[tilemap->cur_layer].flags |= LAYER_LOCKED;
                                 break;
-                            case Filter:
-                                filter_tile(tilemap, cursor.dst_rect.x, cursor.dst_rect.y);
+                        }
+                    } else {
+                        switch (event.key.keysym.scancode) {
+                            case SDL_SCANCODE_B: cur_tool = TOOL_BRUSH; break;
+                            case SDL_SCANCODE_E: cur_tool = TOOL_ERASER; break;
+                            case SDL_SCANCODE_F: cur_tool = TOOL_FILTER; break;
+                            case SDL_SCANCODE_S: cur_tool = TOOL_SELECT; break;
+
+                            case SDL_SCANCODE_1: set_layer(tilemap, 0); break;
+                            case SDL_SCANCODE_2: set_layer(tilemap, 1); break;
+                            case SDL_SCANCODE_3: set_layer(tilemap, 2); break;
+                            case SDL_SCANCODE_4: set_layer(tilemap, 3); break;
+
+                            case SDL_SCANCODE_F1: set_tileset(tilemap, 0); break;
+                            case SDL_SCANCODE_F2: set_tileset(tilemap, 1); break;
+                            case SDL_SCANCODE_F3: set_tileset(tilemap, 2); break;
+
+                            case SDL_SCANCODE_RIGHT:
+                                if(tilemap->layers[tilemap->cur_layer].type == ENTITIES){
+                                    tilemap->cur_entity += 1;
+                                    mathf_clamp(&tilemap->cur_entity, 0, num_entities - 1);
+                                    printf("CURENTITY: %d\n", tilemap->cur_entity);
+                                }
+                                if(tilemap->layers[tilemap->cur_layer].type == TILES){
+                                    tileset_t *tileset_buffer = get_tileset(tilemap->cur_tileset);
+                                    tileset_buffer->selected_tile += 1;
+                                    mathf_clamp(&tileset_buffer->selected_tile, 0, tileset_buffer->num_tiles - 1);
+                                }
                                 break;
-                            case Select:
-                                printf("SELECT\n");
+                            case SDL_SCANCODE_LEFT:
+                                if(tilemap->layers[tilemap->cur_layer].type == ENTITIES){
+                                    tilemap->cur_entity -= 1;
+                                    mathf_clamp(&tilemap->cur_entity, 0, num_entities - 1);
+                                }
+                                if(tilemap->layers[tilemap->cur_layer].type == TILES){
+                                    tileset_t *tileset_buffer = get_tileset(tilemap->cur_tileset);
+                                    tileset_buffer->selected_tile -= 1;
+                                    mathf_clamp(&tileset_buffer->selected_tile, 0, tileset_buffer->num_tiles - 1);
+                                }
                                 break;
                         }
                     }
                     break;
-                default:
+                case SDL_MOUSEBUTTONUP:
+                    cursor.down_x = 0;
+                    cursor.down_y = 0;
+                    break;
+                case SDL_MOUSEBUTTONDOWN:
+                    if(SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LMASK)
+                        editor_action(tilemap, cur_tool);
+                    cursor.down_x = cursor.dst_rect.x - tilemap->offset_x;
+                    cursor.down_y = cursor.dst_rect.y - tilemap->offset_y;
+                    break;
+                case SDL_MOUSEWHEEL:
+                    if(event.wheel.y > 0){
+                        tilemap->zoom = tilemap->zoom + 2 >= MAX_ZOOM ? MAX_ZOOM : tilemap->zoom + 2;
+                    } else if(event.wheel.y < 0){
+                        tilemap->zoom = tilemap->zoom - 2 <= MIN_ZOOM ? MIN_ZOOM : tilemap->zoom - 2;
+                    }
+                    break;
+                case SDL_MOUSEMOTION:
+                    switch (SDL_GetMouseState(NULL, NULL)){
+                        case SDL_BUTTON_LMASK:
+                            editor_action(tilemap, cur_tool);
+                            break;
+                        case SDL_BUTTON_RMASK:
+                            tilemap->offset_x = cursor.dst_rect.x - cursor.down_x;
+                            tilemap->offset_y = cursor.dst_rect.y - cursor.down_y;
+
+                            //TODO(David): Fixed when zoom
+                            if(tilemap->offset_x + tilemap->map_width >= config.window.width)
+                                tilemap->offset_x = config.window.width - tilemap->map_width;
+                            if(tilemap->offset_x <= 0)
+                                tilemap->offset_x = 0;
+                            if(tilemap->offset_y + tilemap->map_height >= config.window.height)
+                                tilemap->offset_y = config.window.height - tilemap->map_height;
+                            if(tilemap->offset_y <= 0)
+                                tilemap->offset_y = 0;
+                            break;
+                    }
                     break;
             }
         }
 
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
-
         render_tilemap(renderer, tilemap);
-
-        if((cursor.dst_rect.x < config.window.width && cursor.dst_rect.x > 0)
-           && (cursor.dst_rect.y < config.window.height && cursor.dst_rect.y > 0))
-                SDL_RenderCopy(renderer, cursor.texture, &cursor.src_rect[cur_tool], &cursor.dst_rect);
-
+        //render_tileset(renderer, tilemap->cur_tileset,& (SDL_Rect) { 20, 80, 160, 256});
+        if(mathf_range(cursor.dst_rect.x, 1, config.window.width)
+           && mathf_range(cursor.dst_rect.y, 1, config.window.height))
+            SDL_RenderCopy(renderer, cursor.texture, &cursor.src_rect[0], &cursor.dst_rect);
         SDL_RenderPresent(renderer);
 
         if(cur_time < FPS)

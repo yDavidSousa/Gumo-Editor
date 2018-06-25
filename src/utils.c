@@ -33,3 +33,24 @@ SDL_Rect *split_image(SDL_Texture *texture, const int column, const int row) {
 int snap_to_grid(const int value, const int increment, const int offset){
     return (value/increment) * increment + offset;
 }
+
+float mathf_min(const float a, const float b){
+    return (a <= b) ? a : b;
+}
+
+float mathf_max(const float a, const float b){
+    return (a >= b) ? a : b;
+}
+
+void mathf_clamp(int *value,const int min,const int max){
+    if(*(value) <= min)
+        *(value) = min;
+    else if (*value >= max)
+        *(value) = max;
+    else
+        *(value) = *value;
+}
+
+bool mathf_range(float value, float min, float max){
+    return (value >= mathf_min(min, max) && value <= mathf_max(min, max)) ? true : false;
+}

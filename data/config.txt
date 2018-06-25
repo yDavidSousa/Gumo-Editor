@@ -4,6 +4,7 @@ version 0.1
 title Gumo Editor
 icon ../data/icons/gumo32.png
 fullscreen false
+maximized true
 resizable true
 borderless false
 width 960
