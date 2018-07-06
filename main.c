@@ -6,7 +6,7 @@
 
 #include <utils.h>
 #include <tilemap.h>
-#include "gumo_serializer.h"
+#include "gumo.h"
 
 const int FPS = 60;
 const int MAX_ZOOM = 8;
@@ -213,7 +213,7 @@ int main(int argc, char *args[]) {
     tilemap->zoom = 0;
 
     //Add and remove layer_data
-    add_layer(tilemap, "Layer_1", TILES);
+    add_layer(tilemap, "Layer_1", ENTITIES);
     add_layer(tilemap, "Layer_2", TILES);
     add_layer(tilemap, "Layer_3", TILES);
     add_layer(tilemap, "Layer_4", ENTITIES);
@@ -251,7 +251,7 @@ int main(int argc, char *args[]) {
                     if (event.key.keysym.mod & KMOD_CTRL) {
                         switch (event.key.keysym.scancode) {
                             case SDL_SCANCODE_S: save_gtm_file("../content/Tilemap_01.txt", tilemap); break;
-                            case SDL_SCANCODE_O: /*load_tilemap(tilemap, "../content/Tilemap_01.txt.txt");*/ break;
+                            case SDL_SCANCODE_O: load_gtm_file("../content/Tilemap_01.txt", tilemap, renderer); break;
                         }
                     } else if(event.key.keysym.mod & KMOD_SHIFT) {
                         switch (event.key.keysym.scancode) {
@@ -290,7 +290,6 @@ int main(int argc, char *args[]) {
                                 if(tilemap->layers[tilemap->cur_layer].type == ENTITIES){
                                     tilemap->cur_entity += 1;
                                     mathf_clamp(&tilemap->cur_entity, 0, num_entities - 1);
-                                    printf("CURENTITY: %d\n", tilemap->cur_entity);
                                 }
                                 if(tilemap->layers[tilemap->cur_layer].type == TILES){
                                     tileset_t *tileset_buffer = get_tileset(tilemap->cur_tileset);
